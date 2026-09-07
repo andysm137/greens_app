@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:greens_app/screens/main_shell.dart';
 
-//initial start up script, added in github
+//initial start up script, added in github, alterd in vscode
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
