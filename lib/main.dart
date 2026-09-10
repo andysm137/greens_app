@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:greens_app/screens/main_shell.dart';
+import 'package:greens_app/screens/auth_gate.dart';
 
 //initial start up script, added in github, alterd in vscode
 
@@ -24,7 +24,7 @@ class SilkstoneGreensApp extends StatelessWidget {
     return MaterialApp(
       title: 'Silkstone Greens App',
       theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: true),
-      home: const MainShell(),
+      home: const AuthGate(),
       debugShowCheckedModeBanner: false,
     );
   }

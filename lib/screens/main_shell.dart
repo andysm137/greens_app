@@ -3,13 +3,16 @@
 import 'package:flutter/material.dart';
 import 'package:greens_app/screens/admin_view.dart';
 import 'package:greens_app/screens/events_screen.dart';
+import 'package:greens_app/models/team_member.dart';
 
 import 'skill_matrix_view.dart';
 //import 'stage_builder_view.dart';
 import 'dance_builder_view.dart';
 
 class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+  final TeamMember currentMember;
+
+  const MainShell({super.key, required this.currentMember});
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -17,7 +20,6 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
-  bool _isAdminMode = false;
 
   final List<String> _workspaceTitles = [
     'Bookings',
@@ -38,22 +40,15 @@ class _MainShellState extends State<MainShell> {
             child: Row(
               children: [
                 Text(
-                  _isAdminMode ? 'Admin Mode: ON' : 'Admin Mode: OFF',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: _isAdminMode ? Colors.greenAccent : Colors.white70,
-                  ),
+                  widget.currentMember.isAdmin
+                      ? 'Admin'
+                      : (widget.currentMember.isLeader ? 'Leader' : 'Member'),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 8),
-                Switch(
-                  value: _isAdminMode,
-                  activeThumbColor: Colors.greenAccent,
-                  onChanged: (bool value) {
-                    setState(() {
-                      _isAdminMode = value;
-                    });
-                  },
+                IconButton(
+                  tooltip: 'Sign out',
+                  icon: const Icon(Icons.logout),
+                  onPressed: () => Supabase.instance.client.auth.signOut(),
                 ),
               ],
             ),
@@ -105,14 +100,14 @@ class _MainShellState extends State<MainShell> {
     switch (_selectedIndex) {
       case 0:
         return const EventsScreen(
-          isLeaderOrAdmin: true, // Set to true or false for testing
-          currentMemberId: '08a38d27-7d8a-4a49-9065-c0a5d208e5e2', // Replace with a test member ID string
+          isLeaderOrAdmin: false,
+          currentMemberId: '',
         );
       case 1:
         return const SkillsMatrixView();
       case 2:
         return const DanceBuilderView(
-          currentMemberId: '08a38d27-7d8a-4a49-9065-c0a5d208e5e2', // Replace with a test member ID string
+          currentMemberId: '',
         );
       //return const StageBuilderView(
       //  danceName: 'Sallys Dance',

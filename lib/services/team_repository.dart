@@ -24,6 +24,17 @@ class TeamRepository {
     return (response as List).map((map) => TeamMember.fromMap(map)).toList();
   }
 
+  /// Loads the team profile linked to the authenticated Supabase user.
+  Future<TeamMember> fetchCurrentMember(String memberId) async {
+    final response = await _supabase
+        .from('team_members')
+        .select()
+        .eq('id', memberId)
+        .single();
+
+    return TeamMember.fromMap(response);
+  }
+
   /// Creates a new team member using a Map payload from the Admin view
   Future<void> createTeamMember(Map<String, dynamic> data) async {
     await _supabase.from('team_members').insert(data);
