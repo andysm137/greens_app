@@ -1,0 +1,123 @@
+﻿Silkstone Greens App - Comprehensive System Requirements Specification (V3 Final)
+________________
+1. Executive Summary & Purpose
+This document defines the unified software requirements for the Silkstone Greens App (Dance Team Roster & Skill Matrix V3). Designed as a Progressive Web Application (PWA) built with Flutter and backed by Supabase (PostgreSQL 15+), the application provides real-time event roster management, dance position skill tracking, musician instrument/tune qualification, and stage layout planning for dance performances.
+2. Tech Stack & Architecture
+* Frontend: Flutter PWA (Responsive, mobile-first design, installable home-screen app).
+* Backend: Supabase with PostgREST API for client-server communication.
+* Database: PostgreSQL 15+ utilizing Row Level Security (RLS) for data governance.
+* State & Realtime: Real-time WebSocket streaming via Supabase client (using StreamBuilder/FutureBuilder).
+3. User Roles & Security Permissions
+Role
+	Permissions & Access Control
+	Member
+	Views set sheets, accesses their own personal skill matrices, and submits real-time RSVP updates (Attending, Not Attending, Maybe) for events and practices. Restricted from viewing sensitive member contact info (phone/email) via RLS sanitization views.
+	Leader
+	Manages dancer and musician assignments. 
+Updates members competencies and skills.
+Updates the actual practice attendance either at the practice or following.
+Able to execute manual overrides during set planning.
+Views full member details.
+ Receives automated multi-channel notifications on roster/attendance updates.
+Able to create Events/Bookings and set up Practices.
+	Admin
+	All leader functions as well as full administrative control across all features, including system configuration, team profile management, and dance catalog maintenance. Access controlled globally via the top App Bar Admin Mode Toggle.
+	4. Core Functional Requirements
+4.1 Team & Musician Tracking
+* Musician Profiles: Tracks musician records and primary instrument assignments (e.g., Melodeon, Drum, Accordion).
+* Musician Competency: Musician competencies are tracked per dance/tune alongside primary instruments using the same system as Dancers.
+* Booking Instrumentation Constraints: Enforces minimum required instrumentation at the booking level (default minimums: exactly 2 lead melodeons and 1 qualified drummer).
+* Level of Display: Musicians are managed and displayed at the overall booking level rather than at individual dance levels.
+* Any Member can be a Leader and should have a boolean to represent this.
+4.2 Dance Repertoire & Formations
+* Formations: Supports standard dance configurations containing either 8 or 12 numbered dancer positions.
+* Specialized Roles: Optionally includes specialized roles designated as MAF (Middle Ahead Front) and MAB (Middle Along Back).
+* Booking Validation Constraints: Each booking necessitates specific minimums, including at least 2 lead melodeons and 1 qualified drummer.
+* Each booking should have at least 4 viable dances with all positions filled.
+* Each booking should have the facility for a Leader to mark it as Go, Pending or No-go.
+4.3 Competency System (Skill Matrix)
+* Universal Scale: Evaluates competencies using the 3-tier scale:
+   * L (Learner): In training / learning the steps or tune.
+   * Q (Qualified): Fully capable of performing live.
+   * M (Master): Expert capability, able to lead or teach.
+* Complete Matrix Recording: Records dancer capability for every position (1–8 or 1–12, plus MAF and MAB) and musician capability for every dance.
+* There should be the facility for a leader to update the dancers competency to the same setting for all positions with a single button.
+4.4 Dance Builder & Set Layouts
+* Spatial Orientation: Employs a portrait-orientation rectangular grid representation.
+   * Positions 1 & 2 are placed at the top.
+   * Positions 7 & 8 (for 8-dancer sets) or 11 & 12 (for 12-dancer sets) are placed at the bottom.
+   * When enabled, MAF is centrally aligned above positions 1 & 2.
+   * When enabled, MAB is centrally aligned below the bottom row.
+* Optional Roles Mechanics: MAF and MAB slots remain greyed out until a Leader clicks to activate them.
+* Selection & Modal Dialogs: Clicking a position opens a drop-down / modal selection box displaying available members. Qualified/Attending members appear highlighted at the top, while non-qualified or unavailable members are displayed in a lowlighted color for optional manual override.
+* Interactive Drag & Drop: Renders interactive cards supporting drag-and-drop or modal selection assignments.
+4.5 Attendance, Auto-Assignment & Leader Overrides
+* Automated Sub-Lists: RSVPs automatically generate filtered sub-lists of available, qualified dancers for each position.
+* Primary Position Auto-Assignment: Automatically allocates qualified primary dancers across positions without double-booking members within the same set.
+* Auto Reshuffle: A dedicated "Auto Reshuffle" control recalculates set allocations dynamically upon attendance changes.
+* Manual Override: Leaders/Admins retain manual override capabilities to force-assign any dancer or bypass competency filters.
+5. UI / UX Guidelines & Navigation
+* Global Navigation Sidebar: App-like left sidebar containing routing for Bookings, Skill Matrix, Stage Builder, Set Sheet, and Admin workspaces.
+* Tabbed Sub-Views: Contextual tabs separating concerns, such as isolating "Dancer Positions" from "Musician Tunes" in Stage Builder views.
+* Admin Mode Toggle: Prominently located in the top App Bar, acting as a master toggle to gate editing privileges.
+* Dropdowns & Modals: Dropdowns manage standardized selections (dances, members, L/Q/M levels), while Modal Bottom Sheets enable contextual editing within the Skill Matrix without loss of spatial orientation.
+* Error Resilience: Standard Flutter builders (e.g., StreamBuilder) must catch database stream exceptions (e.g., PostgREST schema exceptions) and display non-disruptive, centered red error alert widgets instead of crashing the interface frame.
+* There should be a single sheet output as a comprehensive summary document for a booking that displays all scheduled dances for that booking. 
+   * It serves as a centralized output designed for leaders and performers to review the entire program for an event, including the configuration of each dance and the specific assigned lineup.
+   * Purpose: It serves as a consolidated, printable, or quick-reference view that displays the selected dance routines and assigned personnel for a specific event/booking.
+   * Dancer Assignments: It shows the layout and assigned dancers for all configured dances within that booking (ensuring at least 4 viable dances with all 8 or 12 positions filled).
+   * Booking-Level Musicians: It displays the required musicians (e.g., minimum 2 lead melodeons and 1 qualified drummer) at the overall booking/event level at the top or side of the sheet, rather than repeating them for every individual dance.
+   * Navigation & Role: It should exists as one of the tabbed workspaces in Bookings workspace, as a property of the booking. 
+   * whether it will export as a PDF or a text summary, its primary purpose is to act as a complete offline reference tool for the team.
+6. End-to-End Functional User Flow
+1. Core Data Setup:
+   * Roster & Personnel: Admins add team members with contact information and set system access flags (Member, Leader, Admin, is_leader).
+   * Dance Repertoire: Admins register dance routines specifying default sizes (8 or 12 positions) and toggles for specialized roles (has_maf, has_mab).
+   * Instrumentation Rules: Admins establish default required booking instrumentation (e.g., minimum 2 Lead Melodeons, 1 Qualified Drummer).
+2. Practice Tracking & Attendance:
+   * Event Scheduling: Leaders create practice sessions in the app.
+   * Pre-Practice RSVPs: Members log in to mark their availability (Attending, Not Attending, Maybe).
+   * Post-Practice Attendance: Leaders log actual confirmed attendance following practice to maintain an accurate team training history.
+   * Practices do not need to build sets, but this should be allowed for.
+   * Bookings must build sets.
+3. Skills Updating:
+   * Matrix Management: Leaders update member proficiency on the universal L (Learner), Q (Qualified), and M (Master) scale.
+   * Bulk Updates: Leaders can update a member's rating across all positions in a routine using a single action.
+   * Fine-Tuning: Individual positions or musician instrument qualifications are updated contextually via modal bottom sheets.
+4. Booking Entry:
+   * Booking Creation: Leaders create new event entries, input venue and schedule details, and assign an initial status (Pending, Go, No-go).
+   * Instrumentation & Target Dances: The app attaches booking-level musician requirements and prompts leaders to select planned dance routines.
+5. Member Attendance at Bookings:
+   * Member RSVPs: Members respond to upcoming event invitations on their device.
+   * Realtime Filtering: Supabase WebSocket streams feed responses directly into the layout builder, creating filtered candidate pools of qualified, attending members per position.
+6. Dance Builder & Set Layouts:
+   * Stage Builder Grid: Leaders view the portrait grid layout (positions 1–2 top down to 7–8 or 11–12) and toggle optional MAF/MAB positions.
+   * Auto-Assignment & Overrides: Leaders execute "Auto Assign" or "Auto Reshuffle" to automatically populate sets without double-booking members across routines. Leaders retain manual override controls via modal selection popups.
+   * Validation Checks: The app verifies that the booking contains at least 4 viable filled dances and satisfies minimum musician requirements before updating status to Go.
+7. Approval & Member Notification:
+   * Set Sheet Review: Leaders review the consolidated Set Sheet tab displaying all scheduled dance lineups and booking-level musicians.
+   * Dispatch & Webhooks: Tapping Approve & Send triggers multi-channel alerts (web push, in-app notifications, webhooks) delivering a read-only summary view to all attending team members.
+8. Non-Functional Requirements & Security Specifications
+* System Performance & Latency SLAs:
+   * Screen load times for static layouts must render within 500ms.
+   * Real-time state synchronizations over WebSockets must update active dashboards within 1 second of data dispatch.
+* Authentication & Identity Mechanics:
+   * Secure authentication mapped directly from Supabase Auth identity tokens to internal member records.
+   * Unauthenticated access is completely restricted.
+* Data Privacy & Security Policies:
+   * Sensitive contact fields (phone number and email address) are strictly restricted at the database execution level via Row Level Security policies.
+   * Regular members access sanitized public profiles, while Leaders and Admins are granted elevated data decryption privileges.
+* Audit Logging & Traceability:
+   * Modifications made to member competency ratings, manual stage layout overrides, and final booking status approvals are logged with timestamps and user identity references for operational auditing.
+9. Offline Strategy, Push Engine & Edge Case Handling
+* Offline Availability & Local Caching:
+   * To support outdoor performance environments with limited mobile connectivity, the PWA client caches event set sheets and member matrices locally using local storage.
+   * Published set sheets remain fully readable offline.
+* Data Synchronization & Conflict Handling:
+   * User edits made while disconnected are queued locally.
+   * Upon network re-establishment, edits sync automatically with Supabase.
+   * Conflicting concurrent edits follow a "last leader write wins" precedence rule, accompanied by visual toast notifications.
+* Notification Infrastructure:
+   * Approved booking notifications and emergency lineup changes are dispatched via background Web Push API protocols and webhooks (triggering external channels like SMS/WhatsApp) executed through Supabase Edge Functions.
+* Exception Resilience:
+   * Network drops or API parsing errors generate non-disruptive, centered alert widgets without interrupting application UI stability or causing memory crashes.

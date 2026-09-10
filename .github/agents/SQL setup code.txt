@@ -1,0 +1,402 @@
+﻿-- ==============================================================================
+-- SILKSTONE GREENS APP V3 - CORE DATABASE MIGRATION SCRIPT
+-- Single Source of Truth: System Requirements Specification V3
+-- ==============================================================================
+
+
+-- 1. EXTENSIONS
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+
+-- 2. TABLE DEFINITIONS
+
+
+-- Table 1: team_members
+-- Stores personnel profiles and security role flags.
+CREATE TABLE public.team_members (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    full_name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    phone TEXT,
+    email TEXT UNIQUE,
+    is_leader BOOLEAN NOT NULL DEFAULT FALSE,
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+
+-- Table 2: dance_catalog
+-- Repository for routines, position formats (8 or 12), and specialized role toggles.
+CREATE TABLE public.dance_catalog (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    dance_name TEXT UNIQUE NOT NULL,
+    standard_positions INT NOT NULL CHECK (standard_positions IN (8, 12)),
+    has_maf BOOLEAN NOT NULL DEFAULT FALSE,
+    has_mab BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
+-- Table 3: competencies
+-- Tracks dancer proficiency per position and musician competency per tune.
+-- Universal scale: 'L' (Learner), 'Q' (Qualified), 'M' (Master)
+CREATE TABLE public.competencies (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    member_id UUID NOT NULL REFERENCES public.team_members(id) ON DELETE CASCADE,
+    dance_name TEXT NOT NULL REFERENCES public.dance_catalog(dance_name) ON DELETE CASCADE ON UPDATE CASCADE,
+    position_number INT, -- 1-8 or 1-12, or NULL for general musician competency
+    proficiency_level CHAR(1) NOT NULL CHECK (proficiency_level IN ('L', 'Q', 'M')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT unique_member_dance_position UNIQUE (member_id, dance_name, position_number)
+);
+
+
+-- Table 4: booking_set_layouts
+-- Maps active dancer and musician allocations per performance set.
+CREATE TABLE public.booking_set_layouts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    booking_id UUID NOT NULL,
+    dance_name TEXT NOT NULL REFERENCES public.dance_catalog(dance_name) ON DELETE CASCADE,
+    layout_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL CHECK (status IN ('Go', 'Pending', 'No-go')) DEFAULT 'Pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
+-- Table 5: audit_logs (Required for Section 8 Traceability)
+CREATE TABLE public.audit_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID,
+    action TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    record_id UUID,
+    old_data JSONB,
+    new_data JSONB,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
+-- 3. ROW LEVEL SECURITY (RLS) POLICIES
+
+
+ALTER TABLE public.team_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.dance_catalog ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.competencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.booking_set_layouts ENABLE ROW LEVEL SECURITY;
+
+
+-- Helper Function: Check if authenticated user is a Leader or Admin
+CREATE OR REPLACE FUNCTION public.is_leader_or_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.team_members
+    WHERE id = auth.uid() AND (is_leader = TRUE OR is_admin = TRUE)
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+-- RLS: team_members
+-- Members can view names; phone and email are hidden via application queries unless user is Leader/Admin.
+CREATE POLICY "Allow read access to authenticated members" 
+ON public.team_members FOR SELECT 
+TO authenticated 
+USING (true);
+
+
+CREATE POLICY "Allow full access to Leaders and Admins" 
+ON public.team_members FOR ALL 
+TO authenticated 
+USING (public.is_leader_or_admin());
+
+
+-- RLS: dance_catalog
+CREATE POLICY "Allow read access to catalog for all authenticated users" 
+ON public.dance_catalog FOR SELECT 
+TO authenticated 
+USING (true);
+
+
+CREATE POLICY "Allow Admins to modify catalog" 
+ON public.dance_catalog FOR ALL 
+TO authenticated 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.team_members
+    WHERE id = auth.uid() AND is_admin = TRUE
+  )
+);
+
+
+-- RLS: competencies
+CREATE POLICY "Allow read access to competencies" 
+ON public.competencies FOR SELECT 
+TO authenticated 
+USING (true);
+
+
+CREATE POLICY "Allow Leaders/Admins to update competencies" 
+ON public.competencies FOR ALL 
+TO authenticated 
+USING (public.is_leader_or_admin());
+
+
+-- RLS: booking_set_layouts
+CREATE POLICY "Allow read access to layouts" 
+ON public.booking_set_layouts FOR SELECT 
+TO authenticated 
+USING (true);
+
+
+CREATE POLICY "Allow Leaders/Admins to modify layouts" 
+ON public.booking_set_layouts FOR ALL 
+TO authenticated 
+USING (public.is_leader_or_admin());
+
+
+-- 4. AUDIT LOGGING TRIGGER (Section 8 Requirement)
+
+
+CREATE OR REPLACE FUNCTION public.log_competency_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.audit_logs (user_id, action, table_name, record_id, old_data, new_data)
+    VALUES (
+        auth.uid(),
+        TG_OP,
+        TG_TABLE_NAME,
+        COALESCE(NEW.id, OLD.id),
+        CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN to_jsonb(OLD) ELSE NULL END,
+        CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN to_jsonb(NEW) ELSE NULL END
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+CREATE TRIGGER audit_competencies_trigger
+AFTER INSERT OR UPDATE OR DELETE ON public.competencies
+FOR EACH ROW EXECUTE FUNCTION public.log_competency_changes();
+
+
+
+
+
+
+Supplemental Build
+
+
+-- ==============================================================================
+-- SILKSTONE GREENS APP V3 - SUPPLEMENTARY SCHEMA EXTENSIONS
+-- Purpose: Adds Events, RSVPs, and Musician Profiles for 100% SRS V3 Compliance
+-- ==============================================================================
+
+
+-- 1. TABLE: events
+-- Tracks practice sessions and live performance bookings
+CREATE TABLE IF NOT EXISTS public.events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN ('Practice', 'Booking')),
+    event_date TIMESTAMPTZ NOT NULL,
+    location TEXT,
+    status TEXT NOT NULL CHECK (status IN ('Pending', 'Go', 'No-go')) DEFAULT 'Pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
+-- 2. TABLE: event_rsvps
+-- Stores member RSVPs (Attending, Not Attending, Maybe) for practices and events
+CREATE TABLE IF NOT EXISTS public.event_rsvps (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
+    member_id UUID NOT NULL REFERENCES public.team_members(id) ON DELETE CASCADE,
+    rsvp_status TEXT NOT NULL CHECK (rsvp_status IN ('Attending', 'Not Attending', 'Maybe')),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT unique_event_member_rsvp UNIQUE (event_id, member_id)
+);
+
+
+-- 3. TABLE: musician_profiles
+-- Tracks primary instrument assignments for instrumentation constraint validation
+CREATE TABLE IF NOT EXISTS public.musician_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    member_id UUID NOT NULL REFERENCES public.team_members(id) ON DELETE CASCADE,
+    primary_instrument TEXT NOT NULL, -- e.g., 'Lead Melodeon', 'Drum', 'Accordion'
+    is_qualified BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT unique_member_instrument UNIQUE (member_id, primary_instrument)
+);
+
+
+-- 4. ROW LEVEL SECURITY (RLS) FOR NEW TABLES
+
+
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.event_rsvps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.musician_profiles ENABLE ROW LEVEL SECURITY;
+
+
+-- Read policies (All authenticated members can view schedule & RSVPs)
+CREATE POLICY "Allow read access to events" ON public.events FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow read access to RSVPs" ON public.event_rsvps FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow read access to musician profiles" ON public.musician_profiles FOR SELECT TO authenticated USING (true);
+
+
+-- Write policies
+-- Members can insert/update their own RSVPs
+CREATE POLICY "Members can manage own RSVP" ON public.event_rsvps 
+FOR ALL TO authenticated 
+USING (auth.uid() = member_id) 
+WITH CHECK (auth.uid() = member_id);
+
+
+-- Leaders/Admins have full write access to events and musician profiles
+CREATE POLICY "Leaders manage events" ON public.events FOR ALL TO authenticated USING (public.is_leader_or_admin());
+CREATE POLICY "Leaders manage musician profiles" ON public.musician_profiles FOR ALL TO authenticated USING (public.is_leader_or_admin());
+
+
+-- 5. AUTOMATIC UPDATED_AT TRIGGER FUNCTION
+CREATE OR REPLACE FUNCTION public.update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE TRIGGER update_events_timestamp BEFORE UPDATE ON public.events FOR EACH ROW EXECUTE FUNCTION public.update_timestamp();
+CREATE TRIGGER update_rsvps_timestamp BEFORE UPDATE ON public.event_rsvps FOR EACH ROW EXECUTE FUNCTION public.update_timestamp();
+CREATE TRIGGER update_competencies_timestamp BEFORE UPDATE ON public.competencies FOR EACH ROW EXECUTE FUNCTION public.update_timestamp();
+CREATE TRIGGER update_layouts_timestamp BEFORE UPDATE ON public.booking_set_layouts FOR EACH ROW EXECUTE FUNCTION public.update_timestamp();
+
+
+Access correction for Stage builder
+
+
+
+
+-- 1. Grant usage and select privileges to the anon and authenticated roles
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON public.team_members TO anon, authenticated;
+
+
+-- 2. Ensure RLS allows reading team members (or add a policy if RLS is enabled)
+ALTER TABLE public.team_members ENABLE ROW LEVEL SECURITY;
+
+
+-- Drop existing policy if it conflicts, then create a permissive read policy
+DROP POLICY IF EXISTS "Allow public read access on team_members" ON public.team_members;
+
+
+CREATE POLICY "Allow public read access on team_members"
+ON public.team_members
+FOR SELECT
+USING (true);
+
+
+Access correction for competencies 
+
+
+-- 1. Grant usage and select privileges to anon and authenticated roles
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON public.competencies TO anon, authenticated;
+
+
+-- 2. Ensure RLS allows reading competency records
+ALTER TABLE public.competencies ENABLE ROW LEVEL SECURITY;
+
+
+-- Drop existing policy if it conflicts, then create a permissive read policy
+DROP POLICY IF EXISTS "Allow public read access on competencies" ON public.competencies;
+
+
+CREATE POLICY "Allow public read access on competencies"
+ON public.competencies
+FOR SELECT
+USING (true);
+
+
+
+
+Create dance assignment table
+
+
+CREATE TABLE IF NOT EXISTS public.dance_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dance_name TEXT NOT NULL REFERENCES public.dance_catalog(dance_name) ON DELETE CASCADE,
+    position_number INT NOT NULL,
+    member_id UUID NOT NULL REFERENCES public.team_members(id) ON DELETE CASCADE,
+    CONSTRAINT unique_dance_position UNIQUE (dance_name, position_number)
+);
+ALTER TABLE public.dance_assignments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public access on dance_assignments" ON public.dance_assignments FOR ALL USING (true);
+________________
+
+
+Current Schema
+
+
+table_name,column_name,data_type,is_nullable,column_default
+audit_logs,id,uuid,NO,uuid_generate_v4()
+audit_logs,user_id,uuid,YES,null
+audit_logs,action,text,NO,null
+audit_logs,table_name,text,NO,null
+audit_logs,record_id,uuid,YES,null
+audit_logs,old_data,jsonb,YES,null
+audit_logs,new_data,jsonb,YES,null
+audit_logs,timestamp,timestamp with time zone,NO,now()
+booking_set_layouts,id,uuid,NO,uuid_generate_v4()
+booking_set_layouts,booking_id,uuid,NO,null
+booking_set_layouts,dance_name,text,NO,null
+booking_set_layouts,layout_data,jsonb,NO,'{}'::jsonb
+booking_set_layouts,status,text,NO,'Pending'::text
+booking_set_layouts,created_at,timestamp with time zone,NO,now()
+booking_set_layouts,updated_at,timestamp with time zone,NO,now()
+competencies,id,uuid,NO,uuid_generate_v4()
+competencies,member_id,uuid,NO,null
+competencies,dance_name,text,NO,null
+competencies,position_number,integer,YES,null
+competencies,proficiency_level,character,NO,null
+competencies,created_at,timestamp with time zone,NO,now()
+competencies,updated_at,timestamp with time zone,NO,now()
+dance_assignments,id,uuid,NO,gen_random_uuid()
+dance_assignments,dance_name,text,NO,null
+dance_assignments,position_number,integer,NO,null
+dance_assignments,member_id,uuid,NO,null
+dance_catalog,id,uuid,NO,uuid_generate_v4()
+dance_catalog,dance_name,text,NO,null
+dance_catalog,standard_positions,integer,NO,null
+dance_catalog,has_maf,boolean,NO,false
+dance_catalog,has_mab,boolean,NO,false
+dance_catalog,created_at,timestamp with time zone,NO,now()
+dance_catalog,notes,text,YES,null
+event_rsvps,id,uuid,NO,uuid_generate_v4()
+event_rsvps,event_id,uuid,NO,null
+event_rsvps,member_id,uuid,NO,null
+event_rsvps,rsvp_status,text,NO,null
+event_rsvps,updated_at,timestamp with time zone,NO,now()
+events,id,uuid,NO,uuid_generate_v4()
+events,title,text,NO,null
+events,event_type,text,NO,null
+events,event_date,timestamp with time zone,NO,null
+events,location,text,YES,null
+events,status,text,NO,'Pending'::text
+events,created_at,timestamp with time zone,NO,now()
+events,updated_at,timestamp with time zone,NO,now()
+musician_profiles,id,uuid,NO,uuid_generate_v4()
+musician_profiles,member_id,uuid,NO,null
+musician_profiles,primary_instrument,text,NO,null
+musician_profiles,is_qualified,boolean,NO,true
+musician_profiles,created_at,timestamp with time zone,NO,now()
+team_members,id,uuid,NO,uuid_generate_v4()
+team_members,full_name,text,NO,null
+team_members,created_at,timestamp with time zone,NO,now()
+team_members,phone,text,YES,null
+team_members,email,text,YES,null
+team_members,is_leader,boolean,NO,false
+team_members,is_admin,boolean,NO,false
