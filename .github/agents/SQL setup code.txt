@@ -63,6 +63,9 @@ CREATE TABLE public.booking_set_layouts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.booking_set_layouts
+    ADD CONSTRAINT unique_booking_set_layout UNIQUE (booking_id, dance_name);
+
 
 -- Table 5: audit_logs (Required for Section 8 Traceability)
 CREATE TABLE public.audit_logs (

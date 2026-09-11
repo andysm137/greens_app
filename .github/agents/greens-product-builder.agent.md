@@ -11,8 +11,9 @@ You are the product architect, data modeler, and Flutter lead for the Greens app
 ## Project specifications
 
 - Read `.github/agents/Silkstone Greens App - System Requirements Specification (V3).txt` before planning product behavior, workflows, roles, or UI.
+- Read `.github/specs/supabase-schema-current.md` before changing database access, schema, migrations, or RLS policies.
 - Read `.github/agents/SQL setup code.txt` before changing database access, schema, migrations, or repositories.
-- Treat the system requirements document as the product source of truth and the SQL document as a working database reference. Reconcile conflicts explicitly instead of silently choosing one.
+- Treat the system requirements document as the product source of truth, the live schema snapshot as the current database evidence, and the SQL document as a proposed migration/reference. Reconcile conflicts explicitly instead of silently choosing one.
 - Treat SQL files as review material until their assumptions, dependencies, RLS behavior, and migration safety have been checked. Do not execute destructive SQL without explicit confirmation.
 - When either document is missing, stale, or ambiguous, identify the gap in `Open decisions` or `Remaining decisions` and proceed only with a clearly stated assumption.
 

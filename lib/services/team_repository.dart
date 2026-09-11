@@ -18,7 +18,7 @@ class TeamRepository {
   Future<List<TeamMember>> fetchTeamMembers() async {
     final response = await _supabase
         .from('team_members')
-        .select()
+        .select('*, musician_profiles(primary_instrument)')
         .order('full_name', ascending: true);
 
     return (response as List).map((map) => TeamMember.fromMap(map)).toList();
@@ -28,16 +28,30 @@ class TeamRepository {
   Future<TeamMember> fetchCurrentMember(String memberId) async {
     final response = await _supabase
         .from('team_members')
-        .select()
-        .eq('id', memberId)
-        .single();
+        .select('*, musician_profiles(primary_instrument)')
+        .or('id.eq.$memberId,auth_user_id.eq.$memberId')
+        .maybeSingle();
+
+    if (response == null) {
+      throw const PostgrestException(message: 'Team profile not found');
+    }
 
     return TeamMember.fromMap(response);
   }
 
   /// Creates a new team member using a Map payload from the Admin view
   Future<void> createTeamMember(Map<String, dynamic> data) async {
-    await _supabase.from('team_members').insert(data);
+    final payload = Map<String, dynamic>.from(data)
+      ..remove('instruments');
+    final member = await _supabase
+        .from('team_members')
+        .insert(payload)
+        .select('id')
+        .single();
+    await _replaceMusicianProfiles(
+      member['id'].toString(),
+      data['instruments']?.toString(),
+    );
   }
 
   /// Legacy helper to add a basic team member directly
@@ -58,7 +72,39 @@ class TeamRepository {
     String memberId,
     Map<String, dynamic> data,
   ) async {
-    await _supabase.from('team_members').update(data).eq('id', memberId);
+    final payload = Map<String, dynamic>.from(data)
+      ..remove('instruments');
+    await _supabase.from('team_members').update(payload).eq('id', memberId);
+    await _replaceMusicianProfiles(
+      memberId,
+      data['instruments']?.toString(),
+    );
+  }
+
+  Future<void> _replaceMusicianProfiles(
+    String memberId,
+    String? instruments,
+  ) async {
+    await _supabase
+        .from('musician_profiles')
+        .delete()
+        .eq('member_id', memberId);
+
+    final names = (instruments ?? '')
+        .split(',')
+        .map((instrument) => instrument.trim())
+        .where((instrument) => instrument.isNotEmpty)
+        .toList();
+
+    if (names.isEmpty) return;
+
+    await _supabase.from('musician_profiles').insert([
+      for (final instrument in names)
+        {
+          'member_id': memberId,
+          'primary_instrument': instrument,
+        },
+    ]);
   }
 
   /// Updates admin access role for a member
@@ -310,7 +356,7 @@ extension EventAndBookingRepository on TeamRepository {
   /// Fetch all stored layouts for a given booking event
   Future<List<BookingLayout>> fetchBookingLayouts(String bookingId) async {
     final response = await _supabase
-        .from('booking_layouts')
+        .from('booking_set_layouts')
         .select()
         .eq('booking_id', bookingId);
 
@@ -320,7 +366,7 @@ extension EventAndBookingRepository on TeamRepository {
   /// Save or update a dance layout for a specific booking
   Future<void> saveBookingLayout(BookingLayout layout) async {
     await _supabase
-        .from('booking_layouts')
+        .from('booking_set_layouts')
         .upsert(layout.toMap(), onConflict: 'booking_id,dance_name');
   }
 
@@ -340,6 +386,6 @@ extension EventAndBookingRepository on TeamRepository {
   Future<void> upsertMusicianProfile(MusicianProfile profile) async {
     await _supabase
         .from('musician_profiles')
-        .upsert(profile.toMap(), onConflict: 'member_id');
+        .upsert(profile.toMap(), onConflict: 'member_id,primary_instrument');
   }
 }
