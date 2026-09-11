@@ -306,23 +306,26 @@ class _AdminViewState extends State<AdminView>
                     member.fullName,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  subtitle: Text(
-                    isMusician ? 'Musician: ${member.instruments}' : 'Dancer',
-                  ),
-                  leading: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  subtitle: Row(
                     children: [
-                      CircleAvatar(
-                        backgroundColor: isMusician
-                            ? Colors.purple.shade100
-                            : Colors.blue.shade100,
-                        child: Icon(
-                          isMusician ? Icons.music_note : Icons.person,
-                          color: isMusician ? Colors.purple : Colors.blue,
+                      Expanded(
+                        child: Text(
+                          isMusician
+                              ? 'Musician: ${member.instruments}'
+                              : 'Dancer',
                         ),
                       ),
                       _statusChip(_statusFor(member), compact: true),
                     ],
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor: isMusician
+                        ? Colors.purple.shade100
+                        : Colors.blue.shade100,
+                    child: Icon(
+                      isMusician ? Icons.music_note : Icons.person,
+                      color: isMusician ? Colors.purple : Colors.blue,
+                    ),
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,

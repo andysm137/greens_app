@@ -45,7 +45,7 @@ Deno.serve(async (request) => {
   const { data: callerProfile, error: profileError } = await adminClient
     .from("team_members")
     .select("is_admin")
-    .eq("id", caller.user.id)
+    .or(`id.eq.${caller.user.id},auth_user_id.eq.${caller.user.id}`)
     .single();
 
   if (profileError || callerProfile?.is_admin !== true) {

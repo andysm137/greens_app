@@ -31,7 +31,7 @@ Deno.serve(async (request) => {
   const { data: callerProfile } = await adminClient
     .from("team_members")
     .select("is_admin")
-    .eq("id", caller.user.id)
+    .or(`id.eq.${caller.user.id},auth_user_id.eq.${caller.user.id}`)
     .single();
   if (callerProfile?.is_admin !== true) return json({ error: "Admin access required" }, 403);
 
