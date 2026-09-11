@@ -44,6 +44,13 @@ jobs:
       - name: Build web release
         run: flutter build web --release --base-href "/SilkstoneGreensApp/"
 
+      - name: Inspect generated release
+        run: |
+          echo "Source commit: $(git rev-parse HEAD)"
+          sha256sum build/web/main.dart.js
+          grep -o "Admin Mode: ON" build/web/main.dart.js || true
+          grep -o "Sign in to Silkstone Greens" build/web/main.dart.js || true
+
       - name: Support Flutter client-side routes
         run: cp build/web/index.html build/web/404.html
 
