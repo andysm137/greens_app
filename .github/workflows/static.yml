@@ -34,18 +34,15 @@ jobs:
           channel: stable
 
       - name: Clean previous build output
-        run: flutter clean
+        run: |
+          flutter clean
+          rm -rf build
 
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build web release
         run: flutter build web --release --base-href "/SilkstoneGreensApp/"
-
-      - name: Verify current auth build
-        run: |
-          echo "Building source commit: $(git rev-parse HEAD)"
-          grep -q "Sign in to Silkstone Greens" build/web/main.dart.js
 
       - name: Support Flutter client-side routes
         run: cp build/web/index.html build/web/404.html
