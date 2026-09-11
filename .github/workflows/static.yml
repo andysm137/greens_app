@@ -33,6 +33,9 @@ jobs:
         with:
           channel: stable
 
+      - name: Clean previous build output
+        run: flutter clean
+
       - name: Install dependencies
         run: flutter pub get
 
