@@ -1,5 +1,5 @@
-# Simple workflow for deploying static content to GitHub Pages
-name: Deploy static content to Pages
+# Build Flutter web and publish it to the Pages repository
+name: Deploy Flutter Web
 
 on:
   # Runs on pushes targeting the default branch
@@ -22,22 +22,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          # Upload entire repository
-          path: '.'
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build web release
+        run: flutter build web --release --base-href "/SilkstoneGreensApp/"
+
+      - name: Support Flutter client-side routes
+        run: cp build/web/index.html build/web/404.html
+
+      - name: Publish to Pages repository
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.PAGES_REPO_TOKEN }}
+          external_repository: andysm137/SilkstoneGreensApp
+          publish_branch: main
+          publish_dir: ./build/web
