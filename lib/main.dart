@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:greens_app/screens/auth_gate.dart';
 
 //initial start up script, added in github, alterd in vscode
+//PWA Deployment v1.0 - Fresh build for GitHub Pages hosting
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
