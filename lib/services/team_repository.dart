@@ -246,6 +246,23 @@ class TeamRepository {
         .eq('dance_name', oldDanceName);
   }
 
+  Future<void> updateDanceCatalog({
+    required String oldDanceName,
+    required String danceName,
+    required int standardPositions,
+    required bool hasMaf,
+    required bool hasMab,
+    String? notes,
+  }) async {
+    await _supabase.from('dance_catalog').update({
+      'dance_name': danceName.trim(),
+      'standard_positions': standardPositions,
+      'has_maf': hasMaf,
+      'has_mab': hasMab,
+      'notes': notes?.trim(),
+    }).eq('dance_name', oldDanceName);
+  }
+
   // ==========================================
   // DANCE ASSIGNMENTS (SET LISTS)
   // ==========================================
@@ -281,6 +298,75 @@ class TeamRepository {
         .delete()
         .eq('dance_name', danceName)
         .eq('position_number', positionNumber);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchBookingPrimaryAssignments({
+    required String bookingId,
+    required String danceName,
+  }) async {
+    final response = await _supabase
+        .from('booking_dance_assignments')
+        .select()
+        .eq('booking_id', bookingId)
+        .eq('dance_name', danceName);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<void> assignPrimaryForBookingPosition({
+    required String bookingId,
+    required String danceName,
+    required int positionNumber,
+    required String memberId,
+  }) async {
+    await _supabase.from('booking_dance_assignments').upsert({
+      'booking_id': bookingId,
+      'dance_name': danceName,
+      'position_number': positionNumber,
+      'member_id': memberId,
+      'is_primary': true,
+    }, onConflict: 'booking_id,dance_name,position_number');
+  }
+
+  Future<void> clearPrimaryForBookingPosition({
+    required String bookingId,
+    required String danceName,
+    required int positionNumber,
+  }) async {
+    await _supabase
+        .from('booking_dance_assignments')
+        .delete()
+        .eq('booking_id', bookingId)
+        .eq('dance_name', danceName)
+        .eq('position_number', positionNumber);
+  }
+
+  Future<Map<String, dynamic>?> fetchBookingDanceSettings({
+    required String bookingId,
+    required String danceName,
+  }) async {
+    final response = await _supabase
+        .from('booking_dance_settings')
+        .select()
+        .eq('booking_id', bookingId)
+        .eq('dance_name', danceName)
+        .maybeSingle();
+    return response;
+  }
+
+  Future<void> saveBookingDanceSettings({
+    required String bookingId,
+    required String danceName,
+    required int standardPositions,
+    required bool hasMaf,
+    required bool hasMab,
+  }) async {
+    await _supabase.from('booking_dance_settings').upsert({
+      'booking_id': bookingId,
+      'dance_name': danceName,
+      'standard_positions': standardPositions,
+      'has_maf': hasMaf,
+      'has_mab': hasMab,
+    }, onConflict: 'booking_id,dance_name');
   }
 }
 

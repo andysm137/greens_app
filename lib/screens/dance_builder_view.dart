@@ -1,16 +1,13 @@
-// lib/screens/dance_builder_view.dart
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../services/team_repository.dart';
-import '../models/team_member.dart';
 import '../models/competency.dart';
 import '../models/event_model.dart';
+import '../models/team_member.dart';
+import '../services/team_repository.dart';
 
 class DanceBuilderView extends StatefulWidget {
   final String currentMemberId;
-
   const DanceBuilderView({super.key, required this.currentMemberId});
 
   @override
@@ -18,24 +15,28 @@ class DanceBuilderView extends StatefulWidget {
 }
 
 class _DanceBuilderViewState extends State<DanceBuilderView> {
-  final TeamRepository _teamRepository = TeamRepository();
+  final TeamRepository _repository = TeamRepository();
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  String? _selectedDance;
-  List<String> _dances = [];
-  List<TeamMember> _allMembers = [];
-  List<Competency> _allCompetencies = [];
-
-  // Event Availability Tracking
   List<EventModel> _events = [];
+  List<Map<String, dynamic>> _dances = [];
+  List<TeamMember> _members = [];
+  List<Competency> _competencies = [];
+  Map<int, String> _primaryByPosition = {};
+  Set<String> _attendingIds = {};
   EventModel? _selectedEvent;
-  List<String> _absentMemberIds = [];
-
-  Map<int, String> _positionMemberNames = {};
+  String? _selectedDance;
+  int _positionCount = 8;
   bool _includeMaf = false;
   bool _includeMab = false;
-  final int _standardPositions = 8;
   bool _isLoading = true;
+
+  Map<String, dynamic>? get _dance {
+    for (final item in _dances) {
+      if (item['dance_name'] == _selectedDance) return item;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -43,484 +44,402 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
     _loadInitialData();
   }
 
-  /// Initial load for dances, team members, and upcoming events
   Future<void> _loadInitialData() async {
-    setState(() => _isLoading = true);
     try {
-      final dances = await _teamRepository.fetchDanceNames();
-      final members = await _teamRepository.fetchTeamMembers();
-
-      // Fetch upcoming events for attendance cross-referencing
-      final eventsResponse = await _supabase
+      final dances = await _repository.fetchDanceCatalog();
+      final members = await _repository.fetchTeamMembers();
+      final eventResponse = await _supabase
           .from('events')
           .select()
           .order('event_date', ascending: true);
-
-      final events = (eventsResponse as List)
-          .map((e) => EventModel.fromMap(e))
-          .toList();
-
+      if (!mounted) return;
       setState(() {
         _dances = dances;
-        _allMembers = members;
-        _events = events;
-
-        if (_dances.isNotEmpty && _selectedDance == null) {
-          _selectedDance = _dances.first;
-        }
-        if (_events.isNotEmpty && _selectedEvent == null) {
-          _selectedEvent = _events.first;
-        }
+        _members = members;
+        _events = (eventResponse as List)
+            .map((item) => EventModel.fromMap(item))
+            .toList();
+        _selectedDance ??= dances.isEmpty ? null : dances.first['dance_name'] as String;
+        _selectedEvent ??= _nextBooking(_events);
       });
-
-      if (_selectedEvent != null) {
-        await _loadAbsentMembersForEvent(_selectedEvent!.id);
-      }
-      if (_selectedDance != null) {
-        await _loadAssignmentsForDance(_selectedDance!);
+      await _refreshBookingData();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to load builder data: $error')),
+        );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Fetches member IDs marked as 'Not Attending' for the selected event
-  Future<void> _loadAbsentMembersForEvent(String eventId) async {
-    final response = await _supabase
+  EventModel? _nextBooking(List<EventModel> events) {
+    final now = DateTime.now();
+    final upcomingBookings = events
+        .where((event) =>
+            event.eventType == 'Booking' &&
+            !event.eventDate.isBefore(now))
+        .toList()
+      ..sort((a, b) => a.eventDate.compareTo(b.eventDate));
+
+    if (upcomingBookings.isNotEmpty) return upcomingBookings.first;
+
+    final bookings = events
+        .where((event) => event.eventType == 'Booking')
+        .toList()
+      ..sort((a, b) => a.eventDate.compareTo(b.eventDate));
+    return bookings.isEmpty ? (events.isEmpty ? null : events.first) : bookings.first;
+  }
+
+  Future<void> _refreshBookingData() async {
+    final event = _selectedEvent;
+    final dance = _selectedDance;
+    if (event == null || dance == null) return;
+
+    final rsvps = await _supabase
         .from('event_rsvps')
-        .select('member_id')
-        .eq('event_id', eventId)
-        .eq('rsvp_status', 'Not Attending');
-
-    final absentIds = (response as List)
+        .select('member_id, rsvp_status')
+        .eq('event_id', event.id);
+    final attending = (rsvps as List)
+        .where((item) => item['rsvp_status'] == 'Attending')
         .map((item) => item['member_id'].toString())
-        .toList();
+        .toSet();
+    final competencies = await _repository.fetchCompetenciesForDance(dance);
+    final assignments = await _repository.fetchBookingPrimaryAssignments(
+      bookingId: event.id,
+      danceName: dance,
+    );
+    final settings = await _repository.fetchBookingDanceSettings(
+      bookingId: event.id,
+      danceName: dance,
+    );
 
+    if (!mounted) return;
     setState(() {
-      _absentMemberIds = absentIds;
+      _attendingIds = attending;
+      _competencies = competencies;
+      _primaryByPosition = {
+        for (final item in assignments)
+          item['position_number'] as int: item['member_id'].toString(),
+      };
+      _positionCount = settings?['standard_positions'] as int? ??
+          (_dance?['standard_positions'] == 12 ? 12 : 8);
+      _includeMaf = settings?['has_maf'] as bool? ?? _dance?['has_maf'] == true;
+      _includeMab = settings?['has_mab'] as bool? ?? _dance?['has_mab'] == true;
     });
   }
 
-  /// Fetches position assignments and competencies for the selected dance
-  Future<void> _loadAssignmentsForDance(String danceName) async {
-    final assignments = await _teamRepository.fetchDanceAssignments(danceName);
-    final competencies = await _teamRepository.fetchCompetenciesForDance(
-      danceName,
+  Future<void> _saveFormationSettings() async {
+    final event = _selectedEvent;
+    final dance = _selectedDance;
+    if (event == null || dance == null) return;
+    await _repository.saveBookingDanceSettings(
+      bookingId: event.id,
+      danceName: dance,
+      standardPositions: _positionCount,
+      hasMaf: _includeMaf,
+      hasMab: _includeMab,
     );
+  }
 
-    Map<int, String> namesMap = {};
-
-    for (var item in assignments) {
-      int pos = item['position_number'];
-      String memberId = item['member_id'];
-
-      var member = _allMembers.firstWhere(
-        (m) => m.id == memberId,
-        orElse: () => TeamMember(id: '', fullName: 'Unknown'),
-      );
-      namesMap[pos] = member.fullName;
+  Competency? _competency(String memberId, int position) {
+    for (final item in _competencies) {
+      if (item.memberId == memberId && item.positionNumber == position) return item;
     }
-
-    setState(() {
-      _positionMemberNames = namesMap;
-      _allCompetencies = competencies;
-    });
+    return null;
   }
 
-  /// Assign modal that filters out non-qualifying roles AND absent members
-  void _showAssignDialog(int positionNumber, String positionLabel) {
-    final eligibleMembers = _allMembers.where((m) {
-      // 1. Role Filter: Musician (pos 0) vs Dancer (pos != 0)
-      final matchesRole = (positionNumber == 0) ? m.isMusician : !m.isMusician;
-
-      // 2. Availability Filter: Hide members who RSVP'd 'Not Attending'
-      final isAvailable = !_absentMemberIds.contains(m.id);
-
-      return matchesRole && isAvailable;
+  List<TeamMember> _candidates(int position) {
+    return _members.where((member) {
+      if (member.isMusician || !_attendingIds.contains(member.id)) return false;
+      final competency = _competency(member.id, position);
+        return competency != null &&
+            (competency.proficiencyLevel == 'L' ||
+                competency.proficiencyLevel == 'Q' ||
+                competency.proficiencyLevel == 'M');
     }).toList();
+  }
 
-    showDialog(
+  List<TeamMember> _musicians() {
+    return _members.where((member) {
+      if (!member.isMusician || !_attendingIds.contains(member.id)) return false;
+      return _competencies.any(
+        (item) => item.memberId == member.id &&
+            item.positionNumber == 0 &&
+            (item.proficiencyLevel == 'L' ||
+              item.proficiencyLevel == 'Q' ||
+              item.proficiencyLevel == 'M'),
+      );
+    }).toList();
+  }
+
+  Future<void> _showPositionDialog(int position, String label) async {
+    final candidates = _candidates(position);
+    final primaryId = _primaryByPosition[position];
+    await showDialog<void>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Assign Member to $positionLabel'),
-              const SizedBox(height: 4),
-              Text(
-                'Event: ${_selectedEvent?.title ?? "General"} (${_absentMemberIds.length} unavailable)',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: eligibleMembers.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20.0),
-                    child: Text(
-                      'No available team members match this position for the selected event date.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: eligibleMembers.length,
-                    itemBuilder: (context, index) {
-                      final member = eligibleMembers[index];
-
-                      int dbPosition = positionNumber;
-                      if (positionNumber == -1) dbPosition = 99; // MAF
-                      if (positionNumber == -2) dbPosition = 98; // MAB
-
-                      final competency = _allCompetencies.firstWhere(
-                        (c) =>
-                            c.memberId == member.id &&
-                            c.positionNumber == dbPosition,
-                        orElse: () => Competency(
-                          id: '',
-                          memberId: member.id,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(label),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: candidates.isEmpty
+              ? const Text('No attending qualified or master dancers are available.')
+              : ListView(
+                  shrinkWrap: true,
+                  children: candidates.map((member) {
+                    final competency = _competency(member.id, position)!;
+                    final isPrimary = member.id == primaryId;
+                    return ListTile(
+                      title: Text(
+                        member.fullName,
+                        style: TextStyle(
+                          fontWeight: isPrimary ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      subtitle: Text(competency.proficiencyLevel),
+                      trailing: isPrimary
+                          ? const Icon(Icons.star, color: Colors.amber)
+                          : null,
+                      onTap: () async {
+                        await _repository.assignPrimaryForBookingPosition(
+                          bookingId: _selectedEvent!.id,
                           danceName: _selectedDance!,
-                          positionNumber: dbPosition,
-                          proficiencyLevel: 'None',
-                        ),
-                      );
-
-                      final isQualified =
-                          competency.proficiencyLevel != 'None' &&
-                          competency.proficiencyLevel != '-';
-
-                      return ListTile(
-                        title: Text(member.fullName),
-                        subtitle: Text(
-                          isQualified
-                              ? 'Proficiency: ${competency.proficiencyLevel}'
-                              : 'Not graded for this slot',
-                        ),
-                        trailing: isQualified
-                            ? const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                              )
-                            : const Icon(Icons.warning, color: Colors.orange),
-                        onTap: () async {
-                          await _teamRepository.assignMemberToPosition(
-                            danceName: _selectedDance!,
-                            positionNumber: positionNumber,
-                            memberId: member.id,
-                          );
-                          if (context.mounted) Navigator.pop(context);
-                          await _loadAssignmentsForDance(_selectedDance!);
-                        },
-                      );
-                    },
-                  ),
-          ),
-          actions: [
+                          positionNumber: position,
+                          memberId: member.id,
+                        );
+                        if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        await _refreshBookingData();
+                      },
+                    );
+                  }).toList(),
+                ),
+        ),
+        actions: [
+          if (primaryId != null)
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              onPressed: () async {
+                await _repository.clearPrimaryForBookingPosition(
+                  bookingId: _selectedEvent!.id,
+                  danceName: _selectedDance!,
+                  positionNumber: position,
+                );
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                await _refreshBookingData();
+              },
+              child: const Text('Clear primary'),
             ),
-          ],
-        );
-      },
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildPositionCard(int positionCode, String label, Color badgeColor) {
-    final assignedName = _positionMemberNames[positionCode];
+  Future<void> _showMusicianDialog() async {
+    final musicians = _musicians();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Attending musicians'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: musicians.isEmpty
+              ? const Text('No attending musicians have a competency for this dance.')
+              : ListView(
+                  shrinkWrap: true,
+                  children: musicians.map((member) {
+                    final competency = _competencies.firstWhere(
+                      (item) => item.memberId == member.id && item.positionNumber == 0,
+                    );
+                    return ListTile(
+                      title: Text(member.fullName),
+                      subtitle: Text('${member.instruments ?? 'Musician'} - ${competency.proficiencyLevel}'),
+                    );
+                  }).toList(),
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _positionCard(int position, String label) {
+    final candidates = _candidates(position);
+    final primaryId = _primaryByPosition[position];
+    final primary = candidates.where((member) => member.id == primaryId).firstOrNull;
+    final unavailable = candidates.isEmpty;
 
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: assignedName != null
-                  ? badgeColor
-                  : Colors.grey.shade400,
-              child: Text(
-                positionCode > 0
-                    ? '$positionCode'
-                    : (positionCode == 0 ? 'MUS' : label.substring(0, 3)),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+      color: unavailable ? Colors.red.shade50 : null,
+      child: InkWell(
+        onTap: () => _showPositionDialog(position, label),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: unavailable ? Colors.red : Colors.indigo,
+                child: Text('$position', style: const TextStyle(color: Colors.white, fontSize: 11)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 2,
+                  children: [
+                    if (primary != null)
+                      Text(primary.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    for (final member in candidates.where((item) => item.id != primaryId))
+                      Text(member.fullName),
+                    if (unavailable)
+                      Text('No qualified attending dancer', style: TextStyle(color: Colors.red.shade700)),
+                  ],
                 ),
               ),
-            ),
+              const Icon(Icons.touch_app, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPositionGrid() {
+    final rows = <Widget>[];
+    for (var position = 1; position <= _positionCount; position += 2) {
+      rows.add(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _positionCard(position, 'Position $position')),
             const SizedBox(width: 8),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-                  Text(
-                    assignedName ?? 'Unassigned',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: assignedName != null
-                          ? Colors.black87
-                          : Colors.red.shade300,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            if (assignedName != null)
-              IconButton(
-                icon: const Icon(Icons.close, size: 16, color: Colors.red),
-                onPressed: () async {
-                  await _teamRepository.removeMemberFromPosition(
-                    danceName: _selectedDance!,
-                    positionNumber: positionCode,
-                  );
-                  await _loadAssignmentsForDance(_selectedDance!);
-                },
-              ),
-            TextButton(
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(44, 28),
-              ),
-              onPressed: () => _showAssignDialog(positionCode, label),
-              child: Text(
-                assignedName != null ? 'Change' : 'Assign',
-                style: const TextStyle(fontSize: 11),
-              ),
+              child: position + 1 <= _positionCount
+                  ? _positionCard(position + 1, 'Position ${position + 1}')
+                  : const SizedBox(),
             ),
           ],
         ),
+      );
+      rows.add(const SizedBox(height: 8));
+    }
+
+    return Column(children: rows);
+  }
+
+  Widget _buildSpecialPositionCard(int position, String label) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: _positionCard(position, label),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    final compact = MediaQuery.sizeOf(context).width < 600;
 
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: EdgeInsets.all(compact ? 8 : 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Dance Builder & Lineup Selector',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
+          const Text('Dance Builder & Lineup Selector', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-
-          // Header Controls: Event Selector & Repertoire Dropdown
           Card(
-            elevation: 1,
             child: Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      // Target Event Dropdown
-                      Expanded(
-                        child: DropdownButtonFormField<EventModel>(
-                          initialValue: _selectedEvent,
-                          decoration: const InputDecoration(
-                            labelText: 'Target Practice / Event',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                          ),
-                          items: _events.map((e) {
-                            return DropdownMenuItem(
-                              value: e,
-                              child: Text('${e.title} (${e.eventType})'),
-                            );
-                          }).toList(),
-                          onChanged: (val) async {
-                            if (val != null) {
-                              setState(() => _selectedEvent = val);
-                              await _loadAbsentMembersForEvent(val.id);
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-
-                      // Dance Repertoire Dropdown
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _selectedDance,
-                          decoration: const InputDecoration(
-                            labelText: 'Dance Repertoire',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                          ),
-                          items: _dances.map((d) {
-                            return DropdownMenuItem(value: d, child: Text(d));
-                          }).toList(),
-                          onChanged: (val) async {
-                            if (val != null) {
-                              setState(() => _selectedDance = val);
-                              await _loadAssignmentsForDance(val);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
+                  DropdownButtonFormField<EventModel>(
+                    initialValue: _selectedEvent,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Booking', border: OutlineInputBorder()),
+                    items: _events.map((event) => DropdownMenuItem(value: event, child: Text('${event.title} (${event.eventType})'))).toList(),
+                    onChanged: (event) async {
+                      if (event == null) return;
+                      setState(() => _selectedEvent = event);
+                      await _refreshBookingData();
+                    },
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedDance,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Dance', border: OutlineInputBorder()),
+                    items: _dances.map((dance) => DropdownMenuItem(value: dance['dance_name'] as String, child: Text(dance['dance_name'] as String))).toList(),
+                    onChanged: (dance) async {
+                      if (dance == null) return;
+                      setState(() => _selectedDance = dance);
+                      await _refreshBookingData();
+                    },
+                  ),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
                     children: [
-                      Row(
-                        children: [
-                          const Text(
-                            'MAF:',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Switch(
-                            value: _includeMaf,
-                            activeThumbColor: Colors.deepOrange,
-                            onChanged: (val) =>
-                                setState(() => _includeMaf = val),
-                          ),
+                      const Text('Positions'),
+                      SegmentedButton<int>(
+                        segments: const [
+                          ButtonSegment(value: 8, label: Text('8')),
+                          ButtonSegment(value: 12, label: Text('12')),
                         ],
+                        selected: {_positionCount},
+                        onSelectionChanged: (value) {
+                          setState(() => _positionCount = value.first);
+                          _saveFormationSettings();
+                        },
                       ),
-                      const SizedBox(width: 16),
-                      Row(
-                        children: [
-                          const Text(
-                            'MAB:',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Switch(
-                            value: _includeMab,
-                            activeThumbColor: Colors.teal,
-                            onChanged: (val) =>
-                                setState(() => _includeMab = val),
-                          ),
-                        ],
+                      Switch(
+                        value: _includeMaf,
+                        onChanged: (value) {
+                          setState(() => _includeMaf = value);
+                          _saveFormationSettings();
+                        },
                       ),
+                      const Text('MAF'),
+                      Switch(
+                        value: _includeMab,
+                        onChanged: (value) {
+                          setState(() => _includeMab = value);
+                          _saveFormationSettings();
+                        },
+                      ),
+                      const Text('MAB'),
                     ],
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 16),
-
-          // Formation Stage Layout Visualizer
+          const SizedBox(height: 12),
           Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Position 0: Musician
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 280,
-                        height: 60,
-                        child: _buildPositionCard(
-                          0,
-                          'Musician',
-                          Colors.purple.shade400,
-                        ),
-                      ),
-                    ],
+            child: ListView(
+              children: [
+                Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.music_note)),
+                    title: const Text('Musicians'),
+                    subtitle: Text('${_musicians().length} attending qualified musicians'),
+                    onTap: _showMusicianDialog,
                   ),
-                  const SizedBox(height: 12),
-
-                  // Optional MAF Slot
-                  if (_includeMaf) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 280,
-                          height: 60,
-                          child: _buildPositionCard(
-                            -1,
-                            'MAF (Middle at Front)',
-                            Colors.deepOrange,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  // Standard 8 Positions
-                  for (int i = 1; i <= _standardPositions; i += 2) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 60,
-                            child: _buildPositionCard(
-                              i,
-                              'Position $i',
-                              Colors.indigo,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: SizedBox(
-                            height: 60,
-                            child: (i + 1 <= _standardPositions)
-                                ? _buildPositionCard(
-                                    i + 1,
-                                    'Position ${i + 1}',
-                                    Colors.indigo,
-                                  )
-                                : const SizedBox(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-
-                  // Optional MAB Slot
-                  if (_includeMab) ...[
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 280,
-                          height: 60,
-                          child: _buildPositionCard(
-                            -2,
-                            'MAB (Middle at Back)',
-                            Colors.teal,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
+                ),
+                if (_includeMaf) _buildSpecialPositionCard(99, 'MAF'),
+                _buildPositionGrid(),
+                if (_includeMab) _buildSpecialPositionCard(98, 'MAB'),
+              ],
             ),
           ),
         ],

@@ -23,6 +23,8 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
   // Catalog and Roster Data
   List<TeamMember> _members = [];
   List<String> _danceList = [];
+  List<Map<String, dynamic>> _danceCatalogDetails = [];
+  Map<String, int> _dancePositionCounts = {};
   List<Competency> _activeCompetencies = [];
 
   // Currently Selected Filters
@@ -49,10 +51,16 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     try {
       final members = await _teamRepository.fetchTeamMembers();
       final dances = await _teamRepository.fetchDanceNames();
+      final danceDetails = await _teamRepository.fetchDanceCatalog();
 
       setState(() {
         _members = members;
         _danceList = dances;
+        _danceCatalogDetails = danceDetails;
+        _dancePositionCounts = {
+          for (final dance in danceDetails)
+            dance['dance_name'] as String: dance['standard_positions'] as int,
+        };
 
         if (_members.isNotEmpty) _selectedMember = _members.first;
         if (_danceList.isNotEmpty) _selectedDance = _danceList.first;
@@ -68,6 +76,21 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  int get _selectedDancePositionCount =>
+      _dancePositionCounts[_selectedDance] ?? 8;
+
+  int _positionCountForDance(String danceName) =>
+      _dancePositionCounts[danceName] ?? 8;
+
+  bool _danceHasRole(String danceName, String role) {
+    for (final dance in _danceCatalogDetails) {
+      if (dance['dance_name'] == danceName) {
+        return role == 'MAF' ? dance['has_maf'] == true : dance['has_mab'] == true;
+      }
+    }
+    return false;
   }
 
   /// Fetch competencies based on active matrix view mode
@@ -164,13 +187,16 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final isCompact = MediaQuery.sizeOf(context).width < 600;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Skills Matrix')),
       body: Column(
         children: [
           const SizedBox(height: 12),
           // Toggle Switch: By Dance vs By Dancer
-          Center(
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: isCompact ? 12 : 0),
             child: SegmentedButton<MatrixMode>(
               segments: const [
                 ButtonSegment<MatrixMode>(
@@ -185,6 +211,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
                 ),
               ],
               selected: {_currentMode},
+              expandedInsets: isCompact
+                  ? EdgeInsets.zero
+                  : const EdgeInsets.symmetric(horizontal: 24),
               onSelectionChanged: (newSelection) async {
                 setState(() {
                   _currentMode = newSelection.first;
@@ -217,64 +246,96 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
 
   /// Dropdown for selecting active Dance
   Widget _buildDanceDropdown() {
-    return Row(
-      children: [
-        const Text(
-          'Select Dance: ',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: DropdownButton<String>(
-            value: _selectedDance,
-            isExpanded: true,
-            items: _danceList.map((dance) {
-              return DropdownMenuItem(value: dance, child: Text(dance));
-            }).toList(),
-            onChanged: (val) async {
-              if (val != null) {
-                setState(() => _selectedDance = val);
-                await _refreshCompetencies();
-              }
-            },
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 500;
+        final selector = DropdownButton<String>(
+          value: _selectedDance,
+          isExpanded: true,
+          items: _danceList.map((dance) {
+            return DropdownMenuItem(value: dance, child: Text(dance));
+          }).toList(),
+          onChanged: (val) async {
+            if (val != null) {
+              setState(() => _selectedDance = val);
+              await _refreshCompetencies();
+            }
+          },
+        );
+
+        return compact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Select Dance',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  selector,
+                ],
+              )
+            : Row(
+                children: [
+                  const Text(
+                    'Select Dance: ',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: selector),
+                ],
+              );
+      },
     );
   }
 
   /// Dropdown for selecting active Team Member
   Widget _buildDancerDropdown() {
-    return Row(
-      children: [
-        const Text(
-          'Select Member: ',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: DropdownButton<TeamMember>(
-            value: _selectedMember,
-            isExpanded: true,
-            items: _members.map((member) {
-              return DropdownMenuItem(
-                value: member,
-                child: Text(
-                  member.isMusician
-                      ? '${member.fullName} (${member.instruments})'
-                      : member.fullName,
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 500;
+        final selector = DropdownButton<TeamMember>(
+          value: _selectedMember,
+          isExpanded: true,
+          items: _members.map((member) {
+            return DropdownMenuItem(
+              value: member,
+              child: Text(
+                member.isMusician
+                    ? '${member.fullName} (${member.instruments})'
+                    : member.fullName,
+              ),
+            );
+          }).toList(),
+          onChanged: (val) async {
+            if (val != null) {
+              setState(() => _selectedMember = val);
+              await _refreshCompetencies();
+            }
+          },
+        );
+
+        return compact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Select Member',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  selector,
+                ],
+              )
+            : Row(
+                children: [
+                  const Text(
+                    'Select Member: ',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: selector),
+                ],
               );
-            }).toList(),
-            onChanged: (val) async {
-              if (val != null) {
-                setState(() => _selectedMember = val);
-                await _refreshCompetencies();
-              }
-            },
-          ),
-        ),
-      ],
+      },
     );
   }
 
@@ -283,6 +344,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     if (_selectedDance == null) {
       return const Center(child: Text('No dance selected.'));
     }
+
+    final hasMaf = _danceHasRole(_selectedDance!, 'MAF');
+    final hasMab = _danceHasRole(_selectedDance!, 'MAB');
 
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
@@ -310,7 +374,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
               label: Text('MAB', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
             ...List.generate(
-              8,
+              _selectedDancePositionCount,
               (i) => DataColumn(
                 label: Text(
                   'Pos ${i + 1}',
@@ -358,12 +422,16 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
                 if (isMusician) ...[
                   _buildDisabledCell(),
                   _buildDisabledCell(),
-                  ...List.generate(8, (_) => _buildDisabledCell()),
+                  ...List.generate(_selectedDancePositionCount, (_) => _buildDisabledCell()),
                 ] else ...[
-                  _buildCell(member.id, _selectedDance!, mafPosition),
-                  _buildCell(member.id, _selectedDance!, mabPosition),
+                  hasMaf
+                    ? _buildCell(member.id, _selectedDance!, mafPosition)
+                    : _buildDisabledCell(),
+                  hasMab
+                    ? _buildCell(member.id, _selectedDance!, mabPosition)
+                    : _buildDisabledCell(),
                   ...List.generate(
-                    8,
+                    _selectedDancePositionCount,
                     (i) => _buildCell(member.id, _selectedDance!, i + 1),
                   ),
                 ],
@@ -409,7 +477,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
               label: Text('MAB', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
             ...List.generate(
-              8,
+              12,
               (i) => DataColumn(
                 label: Text(
                   'Pos ${i + 1}',
@@ -419,6 +487,10 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
             ),
           ],
           rows: _danceList.map((dance) {
+            final dancePositionCount = _positionCountForDance(dance);
+            final hasMaf = _danceHasRole(dance, 'MAF');
+            final hasMab = _danceHasRole(dance, 'MAB');
+
             return DataRow(
               cells: [
                 DataCell(
@@ -439,13 +511,19 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
                 if (isMusician) ...[
                   _buildDisabledCell(),
                   _buildDisabledCell(),
-                  ...List.generate(8, (_) => _buildDisabledCell()),
+                  ...List.generate(12, (_) => _buildDisabledCell()),
                 ] else ...[
-                  _buildCell(_selectedMember!.id, dance, mafPosition),
-                  _buildCell(_selectedMember!.id, dance, mabPosition),
+                  hasMaf
+                      ? _buildCell(_selectedMember!.id, dance, mafPosition)
+                      : _buildDisabledCell(),
+                  hasMab
+                      ? _buildCell(_selectedMember!.id, dance, mabPosition)
+                      : _buildDisabledCell(),
                   ...List.generate(
-                    8,
-                    (i) => _buildCell(_selectedMember!.id, dance, i + 1),
+                    12,
+                    (i) => i < dancePositionCount
+                        ? _buildCell(_selectedMember!.id, dance, i + 1)
+                        : _buildDisabledCell(),
                   ),
                 ],
               ],

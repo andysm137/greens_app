@@ -95,74 +95,20 @@ class _EventsScreenState extends State<EventsScreen> {
         statusColor = Colors.orange;
     }
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: ExpansionTile(
-        title: Text(
-          event.title,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(
-          '${event.eventType} • ${event.eventDate.day}/${event.eventDate.month}/${event.eventDate.year} ${event.eventDate.hour}:${event.eventDate.minute.toString().padLeft(2, '0')}',
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: statusColor.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: statusColor),
-          ),
-          child: Text(
-            event.status,
-            style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
-          ),
-        ),
-        children: [
-          if (event.location != null && event.location!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 4.0,
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text(event.location!),
-                ],
-              ),
-            ),
-          const Divider(),
-          _buildRsvpSection(event.id),
-          _buildMembersRsvpList(event.id),
-          if (widget.isLeaderOrAdmin && event.eventType == 'Booking')
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Text('Booking Status: '),
-                  DropdownButton<String>(
-                    value: event.status,
-                    items: ['Pending', 'Go', 'No-go']
-                        .map(
-                          (status) => DropdownMenuItem(
-                            value: status,
-                            child: Text(status),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (newStatus) {
-                      if (newStatus != null) {
-                        _updateEventStatus(event.id, newStatus);
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
+    final rowColor = switch (event.status) {
+      'Go' => Colors.green.shade50,
+      'No-go' => Colors.red.shade50,
+      _ => Colors.yellow.shade50,
+    };
+
+    return _EventStatusCard(
+      rowColor: rowColor,
+      statusColor: statusColor,
+      event: event,
+      isLeaderOrAdmin: widget.isLeaderOrAdmin,
+      onStatusChanged: (status) => _updateEventStatus(event.id, status),
+      rsvpSectionBuilder: () => _buildRsvpSection(event.id),
+      membersRsvpListBuilder: () => _buildMembersRsvpList(event.id),
     );
   }
 
@@ -366,6 +312,7 @@ class _EventsScreenState extends State<EventsScreen> {
               'rsvp_status': status,
               'updated_at': DateTime.now().toIso8601String(),
             }, onConflict: 'event_id,member_id');
+            if (mounted) setState(() {});
           },
         );
       }).toList(),
@@ -485,6 +432,145 @@ class _EventsScreenState extends State<EventsScreen> {
             },
             child: const Text('Create'),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EventStatusCard extends StatefulWidget {
+  final Color rowColor;
+  final Color statusColor;
+  final EventModel event;
+  final bool isLeaderOrAdmin;
+  final ValueChanged<String> onStatusChanged;
+  final Widget Function() rsvpSectionBuilder;
+  final Widget Function() membersRsvpListBuilder;
+
+  const _EventStatusCard({
+    required this.rowColor,
+    required this.statusColor,
+    required this.event,
+    required this.isLeaderOrAdmin,
+    required this.onStatusChanged,
+    required this.rsvpSectionBuilder,
+    required this.membersRsvpListBuilder,
+  });
+
+  @override
+  State<_EventStatusCard> createState() => _EventStatusCardState();
+}
+
+class _EventStatusCardState extends State<_EventStatusCard> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final event = widget.event;
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Column(
+        children: [
+          Material(
+            color: widget.rowColor,
+            borderRadius: BorderRadius.vertical(
+              top: const Radius.circular(4),
+              bottom: Radius.circular(_isExpanded ? 0 : 4),
+            ),
+            child: InkWell(
+              onTap: () => setState(() => _isExpanded = !_isExpanded),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            event.title,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            '${event.eventType} • ${event.eventDate.day}/${event.eventDate.month}/${event.eventDate.year} ${event.eventDate.hour}:${event.eventDate.minute.toString().padLeft(2, '0')}',
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: widget.statusColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: widget.statusColor),
+                      ),
+                      child: Text(
+                        event.status,
+                        style: TextStyle(
+                          color: widget.statusColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(_isExpanded ? Icons.expand_less : Icons.expand_more),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_isExpanded)
+            Column(
+              children: [
+                if (event.location != null && event.location!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        Text(event.location!),
+                      ],
+                    ),
+                  ),
+                const Divider(),
+                widget.rsvpSectionBuilder(),
+                widget.membersRsvpListBuilder(),
+                if (widget.isLeaderOrAdmin ) 
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        const Text('Booking Status: '),
+                        DropdownButton<String>(
+                          value: event.status,
+                          items: ['Pending', 'Go', 'No-go']
+                              .map(
+                                (status) => DropdownMenuItem(
+                                  value: status,
+                                  child: Text(status),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (status) {
+                            if (status != null) widget.onStatusChanged(status);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
         ],
       ),
     );

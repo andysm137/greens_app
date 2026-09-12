@@ -31,6 +31,8 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Silkstone Greens: ${_workspaceTitles[_selectedIndex]}'),
@@ -55,44 +57,71 @@ class _MainShellState extends State<MainShell> {
           ),
         ],
       ), //AppBar
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (int index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
-            labelType: NavigationRailLabelType.all,
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.event_note),
-                label: Text('Bookings'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.grid_view),
-                label: Text('Skill Matrix'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.theater_comedy),
-                label: Text('Dance Builder'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.description),
-                label: Text('Set Sheet'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.admin_panel_settings),
-                label: Text('Admin'),
-              ),
-            ],
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
-          Expanded(child: _getSelectedWorkspaceWidget()),
-        ],
-      ), // Body
+      body: isMobile
+          ? _getSelectedWorkspaceWidget()
+          : Row(
+              children: [
+                _buildNavigationRail(),
+                const VerticalDivider(thickness: 1, width: 1),
+                Expanded(child: _getSelectedWorkspaceWidget()),
+              ],
+            ),
+      bottomNavigationBar: isMobile ? _buildNavigationBar() : null,
     );
+  }
+
+  NavigationRail _buildNavigationRail() {
+    return NavigationRail(
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: _selectWorkspace,
+      labelType: NavigationRailLabelType.all,
+      destinations: _navigationDestinations(),
+    );
+  }
+
+  NavigationBar _buildNavigationBar() {
+    return NavigationBar(
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: _selectWorkspace,
+      destinations: _navigationDestinations()
+          .map(
+            (destination) => NavigationDestination(
+              icon: destination.icon,
+              selectedIcon: destination.selectedIcon,
+              label: (destination.label as Text).data ?? '',
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  List<NavigationRailDestination> _navigationDestinations() {
+    return const [
+      NavigationRailDestination(
+        icon: Icon(Icons.event_note),
+        label: Text('Bookings'),
+      ),
+      NavigationRailDestination(
+        icon: Icon(Icons.grid_view),
+        label: Text('Skills'),
+      ),
+      NavigationRailDestination(
+        icon: Icon(Icons.theater_comedy),
+        label: Text('Builder'),
+      ),
+      NavigationRailDestination(
+        icon: Icon(Icons.description),
+        label: Text('Set Sheet'),
+      ),
+      NavigationRailDestination(
+        icon: Icon(Icons.admin_panel_settings),
+        label: Text('Admin'),
+      ),
+    ];
+  }
+
+  void _selectWorkspace(int index) {
+    setState(() => _selectedIndex = index);
   }
 
   // This method selects which screen/widget to display based on the active sidebar tab

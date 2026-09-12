@@ -1,6 +1,6 @@
 # Greens Development Breadcrumb
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 This file preserves the current implementation context for future development sessions. It records decisions and verified state, not every conversation detail.
 
@@ -28,6 +28,14 @@ Primary roles:
 - Corrected booking repository references to `booking_set_layouts`.
 - Added current live schema and RLS policy snapshots.
 - Fixed the Admin roster `ListTile` overflow by keeping the avatar in the leading slot and placing status beside the subtitle.
+- Added PWA deployment context from `.github/agent/PWA_DEPLOYMENT_NOTES.md` in the GitHub repository.
+- Added password recovery routing and a change-password screen for Supabase `PASSWORD_RECOVERY` sessions.
+- Added the first responsive UI slice: mobile uses bottom navigation, desktop retains the NavigationRail, and the Skill Matrix stacks its selectors on narrow screens while preserving horizontal table scrolling.
+- Reworked Dance Builder around booking-scoped primary assignments, attending qualified candidates, musician competency dialogs, tap-to-edit position cards, red unavailable positions, and selectable 8/12-position layouts.
+- Fixed Dance Builder MAF/MAB activation, included Learner (`L`) candidates alongside Qualified/Master, defaulted selection to the next chronological future Booking, and restored status-colored booking cards.
+- Added persistent `booking_dance_settings` for per-booking/per-dance 8/12 position and MAF/MAB choices; builder changes now save immediately and reload for every leader.
+- Restored full Admin dance catalog configuration: standard positions default to 8 with a `Can be performed as 12` option, plus MAF/MAB toggles and notes; Skill Matrix reads these catalog properties per dance.
+- Updated Skill Matrix position columns to derive from `dance_catalog.standard_positions` instead of assuming eight positions.
 
 ## Current files and boundaries
 
@@ -48,6 +56,18 @@ Supabase:
 - `supabase/functions/invite-existing-member/index.ts`
 - `supabase/functions/member-auth-statuses/index.ts`
 - `supabase/functions/delete-member/index.ts`
+- `supabase/migrations/20260912_booking_assignments.sql`: booking-scoped primary assignment table and RLS.
+- `supabase/migrations/20260912_booking_dance_settings.sql`: persistent booking/dance formation settings and RLS.
+
+PWA deployment:
+
+- Source repository: `andysm137/greens_app`.
+- Target GitHub Pages repository: `andysm137/SilkstoneGreensApp`.
+- Workflow: `.github/workflows/static.yml`.
+- Deployment method: build Flutter web in `greens_app`, then publish `build/web` to the target repository using `PAGES_REPO_TOKEN`.
+- Expected public URL: `https://andysm137.github.io/SilkstoneGreensApp/`.
+- Expected build command: `flutter build web --release --base-href "/SilkstoneGreensApp/"`.
+- The PWA manifest, icons, standalone display mode, and Flutter web service worker are already configured according to the deployment notes.
 
 Documentation:
 
@@ -70,6 +90,14 @@ Before testing invitation tracking:
 3. Ensure the current admin profile has `is_admin = true` and is linked through either `team_members.id` or `team_members.auth_user_id`.
 4. Configure Supabase Auth email and redirect URLs.
 
+For PWA deployment:
+
+1. Verify `PAGES_REPO_TOKEN` in the `greens_app` repository's GitHub Actions secrets.
+2. Confirm the token is a Classic Personal Access Token with `repo` and `workflow` scopes, if that is the token type required by the workflow.
+3. Review the failed `Publish to Pages repository` step for the exact error; the deployment notes identify this as unresolved and suggest token permissions or expiry as likely causes.
+4. Manually run the deployment workflow from the `main` branch after correcting the token.
+5. Confirm that files update in `SilkstoneGreensApp` and verify the public Pages URL.
+
 ## Known risks and unfinished work
 
 - Live RLS contains unrestricted public policies on several tables. This conflicts with the product security requirements and must be hardened deliberately.
@@ -78,18 +106,34 @@ Before testing invitation tracking:
 - Existing widget test is stale and must be replaced with app-specific tests.
 - `events_screen.dart` has an existing `use_build_context_synchronously` lint.
 - OTP or magic-link login was discussed but deliberately deferred.
+- A signed-in Change Password action is still to be added to the account/profile UI. It should collect a new password and confirmation, then call `auth.updateUser(UserAttributes(password: ...))` without requiring a reset email.
+- Password reset redirects require Supabase Auth URL configuration for the active local debug URL and the current GitHub Pages URL; previously issued reset emails may still use the old redirect.
 - Edge Function deployment is external to Flutter analysis; local code can compile while deployed functions remain stale.
+- PWA deployment may build successfully while cross-repository publishing fails; verify the GitHub Actions publish step separately.
+- The GitHub deployment notes report that stale build artifacts were addressed by ignoring `/build/` and `web/flutter_service_worker.js`; confirm those `.gitignore` changes are present in the local checkout.
+- Events, Dance Builder, and Admin still need targeted mobile layouts; they should adapt their controls and cards rather than relying only on global scaling.
+- The booking-scoped assignment migration must be applied before the new Dance Builder can save or load primary assignments.
+- The booking formation settings migration must be applied before MAF/MAB and 8/12 choices can persist.
+- Existing `dance_assignments` rows are legacy/global assignments and have not been automatically migrated into booking-scoped assignments.
+- Builder candidates require an exact `competencies.dance_name` match for the selected catalog dance and an `event_rsvps.rsvp_status` of `Attending`; mismatched dance names or RSVP values will correctly exclude a member.
 
 ## Recommended next sequence
 
-1. Verify migration and all four Edge Functions in Supabase.
-2. Test Add Member, edit, Send Invite, invitation completion, status refresh, and delete.
-3. Capture live constraints, foreign keys, triggers, and functions.
-4. Harden RLS and remove public write policies.
-5. Replace the stale widget test and add repository/auth tests.
-6. Refactor the broad repository into feature-specific services.
-7. Decide whether to implement email OTP or magic-link login.
-8. Continue with booking validation and Set Sheet.
+1. Verify the GitHub Actions `Publish to Pages repository` step and `PAGES_REPO_TOKEN`.
+2. Confirm the PWA appears at `https://andysm137.github.io/SilkstoneGreensApp/` after a fresh workflow run.
+3. Verify the Supabase migration and all four Edge Functions.
+4. Test Add Member, edit, Send Invite, invitation completion, status refresh, and delete.
+5. Apply and verify `supabase/migrations/20260912_booking_assignments.sql`.
+6. Apply and verify `supabase/migrations/20260912_booking_dance_settings.sql`.
+7. Migrate or retire legacy `dance_assignments` data deliberately.
+8. Capture live constraints, foreign keys, triggers, and functions.
+9. Harden RLS and remove public write policies.
+10. Replace the stale widget test and add repository/auth tests.
+11. Refactor the broad repository into feature-specific services.
+12. Decide whether to implement email OTP or magic-link login.
+13. Add the signed-in Change Password account action.
+14. Complete responsive layouts for Events, Dance Builder, and Admin.
+15. Continue with booking validation and Set Sheet.
 
 ## Session update rule
 

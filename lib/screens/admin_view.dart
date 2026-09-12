@@ -175,35 +175,44 @@ class _AdminViewState extends State<AdminView>
   /// Open dialog to create or edit a dance name
   Future<void> _openDanceDialog([String? oldDanceName]) async {
     final controller = TextEditingController(text: oldDanceName ?? '');
-    final result = await showDialog<String>(
+    final catalog = oldDanceName == null
+        ? null
+        : (await _teamRepository.fetchDanceCatalog()).firstWhere(
+            (dance) => dance['dance_name'] == oldDanceName,
+            orElse: () => <String, dynamic>{},
+          );
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(oldDanceName == null ? 'Add New Dance' : 'Rename Dance'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Dance Name'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (context) => DanceCatalogDialog(
+        controller: controller,
+        initialPositions: catalog?['standard_positions'] as int? ?? 8,
+        initialMaf: catalog?['has_maf'] as bool? ?? false,
+        initialMab: catalog?['has_mab'] as bool? ?? false,
+        initialNotes: catalog?['notes']?.toString(),
+        isEditing: oldDanceName != null,
       ),
     );
 
-    if (result != null && result.isNotEmpty) {
+    if (result != null && (result['dance_name'] as String).isNotEmpty) {
       setState(() => _isLoading = true);
       try {
         if (oldDanceName == null) {
-          await _teamRepository.createDance(result);
+          await _teamRepository.addDance(
+            result['dance_name'] as String,
+            notes: result['notes'] as String?,
+            standardPositions: result['standard_positions'] as int,
+            hasMaf: result['has_maf'] as bool,
+            hasMab: result['has_mab'] as bool,
+          );
         } else {
-          await _teamRepository.updateDanceName(oldDanceName, result);
+          await _teamRepository.updateDanceCatalog(
+            oldDanceName: oldDanceName,
+            danceName: result['dance_name'] as String,
+            notes: result['notes'] as String?,
+            standardPositions: result['standard_positions'] as int,
+            hasMaf: result['has_maf'] as bool,
+            hasMab: result['has_mab'] as bool,
+          );
         }
         await _loadAdminData();
       } catch (e) {
@@ -427,6 +436,120 @@ class InviteMemberDialog extends StatefulWidget {
 
   @override
   State<InviteMemberDialog> createState() => _InviteMemberDialogState();
+}
+
+class DanceCatalogDialog extends StatefulWidget {
+  final TextEditingController controller;
+  final int initialPositions;
+  final bool initialMaf;
+  final bool initialMab;
+  final String? initialNotes;
+  final bool isEditing;
+
+  const DanceCatalogDialog({
+    super.key,
+    required this.controller,
+    required this.initialPositions,
+    required this.initialMaf,
+    required this.initialMab,
+    required this.initialNotes,
+    required this.isEditing,
+  });
+
+  @override
+  State<DanceCatalogDialog> createState() => _DanceCatalogDialogState();
+}
+
+class _DanceCatalogDialogState extends State<DanceCatalogDialog> {
+  late int _positions;
+  late bool _hasMaf;
+  late bool _hasMab;
+  late final TextEditingController _notesController;
+
+  @override
+  void initState() {
+    super.initState();
+    _positions = widget.initialPositions == 12 ? 12 : 8;
+    _hasMaf = widget.initialMaf;
+    _hasMab = widget.initialMab;
+    _notesController = TextEditingController(text: widget.initialNotes ?? '');
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    Navigator.of(context).pop({
+      'dance_name': widget.controller.text.trim(),
+      'standard_positions': _positions,
+      'has_maf': _hasMaf,
+      'has_mab': _hasMab,
+      'notes': _notesController.text.trim().isEmpty
+          ? null
+          : _notesController.text.trim(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.isEditing ? 'Edit Dance' : 'Add New Dance'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: widget.controller,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Dance Name'),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              initialValue: _positions,
+              decoration: const InputDecoration(labelText: 'Standard positions'),
+              items: const [
+                DropdownMenuItem(value: 8, child: Text('8')),
+                DropdownMenuItem(
+                  value: 12,
+                  child: Text('Can be performed as 12'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _positions = value);
+              },
+            ),
+            SwitchListTile(
+              title: const Text('MAF'),
+              subtitle: const Text('Middle Ahead Front'),
+              value: _hasMaf,
+              onChanged: (value) => setState(() => _hasMaf = value),
+            ),
+            SwitchListTile(
+              title: const Text('MAB'),
+              subtitle: const Text('Middle Along Back'),
+              value: _hasMab,
+              onChanged: (value) => setState(() => _hasMab = value),
+            ),
+            TextField(
+              controller: _notesController,
+              decoration: const InputDecoration(labelText: 'Notes'),
+              maxLines: 2,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+  }
 }
 
 class _InviteMemberDialogState extends State<InviteMemberDialog> {
