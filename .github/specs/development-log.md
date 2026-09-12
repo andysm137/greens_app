@@ -41,6 +41,7 @@ Primary roles:
 - Retained all viable dancer candidates in Set Sheet rows when a primary exists, added duplicate-primary warnings/blocking in Dance Builder, added a dance-level insufficient-dancers banner, and added a database uniqueness migration for one primary dancer per booking/dance.
 - Corrected the insufficient-dancers check to require a unique matching dancer across all active positions; one qualified dancer repeated across every position now triggers the warning.
 - Updated Set Sheet to include Practices, show attending dancers above musicians, and grey dance tiles that lack unique attending `L/Q/M` coverage for every active position.
+- Created a fresh local release PWA build with `flutter build web --release --base-href "/SilkstoneGreensApp/"`; output is in `build/web` with `404.html` copied for client-side routing.
 - Restored the Dance Builder formation graphic as a two-column grid, with centered MAF above and MAB below the numbered positions.
 - Fixed expanded booking RSVP content so member and leader attendance changes refresh immediately.
 - Limited booking status colors to the event header row so expanded RSVP content remains neutral.
@@ -119,6 +120,7 @@ For PWA deployment:
 - Password reset redirects require Supabase Auth URL configuration for the active local debug URL and the current GitHub Pages URL; previously issued reset emails may still use the old redirect.
 - Edge Function deployment is external to Flutter analysis; local code can compile while deployed functions remain stale.
 - PWA deployment may build successfully while cross-repository publishing fails; verify the GitHub Actions publish step separately.
+- The local PWA build succeeds. The build reports the known `dart:html` WebAssembly incompatibility in Set Sheet and Flutter clean may warn about locked ephemeral directories; neither prevented the release build.
 - The GitHub deployment notes report that stale build artifacts were addressed by ignoring `/build/` and `web/flutter_service_worker.js`; confirm those `.gitignore` changes are present in the local checkout.
 - Events, Dance Builder, and Admin still need targeted mobile layouts; they should adapt their controls and cards rather than relying only on global scaling.
 - The booking-scoped assignment migration must be applied before the new Dance Builder can save or load primary assignments.
