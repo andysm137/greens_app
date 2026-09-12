@@ -174,6 +174,40 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
     }).toList();
   }
 
+  bool get _hasUnavailablePosition {
+    final positions = <int>[
+      if (_includeMaf) 99,
+      for (var position = 1; position <= _positionCount; position++) position,
+      if (_includeMab) 98,
+    ];
+    if (positions.any((position) => _candidates(position).isEmpty)) {
+      return true;
+    }
+
+    // Check whether every active position can receive a different dancer.
+    // This catches cases where one qualified dancer appears in every position.
+    final assignedDancerByPosition = <int, String>{};
+    final positionsByCandidateCount = [...positions]
+      ..sort(
+        (left, right) =>
+            _candidates(left).length.compareTo(_candidates(right).length),
+      );
+
+    bool canAssign(int index) {
+      if (index == positionsByCandidateCount.length) return true;
+      final position = positionsByCandidateCount[index];
+      for (final dancer in _candidates(position)) {
+        if (assignedDancerByPosition.containsValue(dancer.id)) continue;
+        assignedDancerByPosition[position] = dancer.id;
+        if (canAssign(index + 1)) return true;
+        assignedDancerByPosition.remove(position);
+      }
+      return false;
+    }
+
+    return !canAssign(0);
+  }
+
   Future<void> _showPositionDialog(int position, String label) async {
     final candidates = _candidates(position);
     final primaryId = _primaryByPosition[position];
@@ -202,6 +236,26 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                           ? const Icon(Icons.star, color: Colors.amber)
                           : null,
                       onTap: () async {
+                        final existingPosition = _primaryByPosition.entries
+                            .where(
+                              (entry) =>
+                                  entry.value == member.id &&
+                                  entry.key != position,
+                            )
+                            .map((entry) => entry.key)
+                            .firstOrNull;
+                        if (existingPosition != null) {
+                          if (dialogContext.mounted) {
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '${member.fullName} is already primary at position $existingPosition. Clear that primary before assigning this position.',
+                                ),
+                              ),
+                            );
+                          }
+                          return;
+                        }
                         await _repository.assignPrimaryForBookingPosition(
                           bookingId: _selectedEvent!.id,
                           danceName: _selectedDance!,
@@ -428,6 +482,20 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
           Expanded(
             child: ListView(
               children: [
+                if (_hasUnavailablePosition)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    color: Colors.red.shade100,
+                    child: Text(
+                      'There are not enough dancers to perform this dance',
+                      style: TextStyle(
+                        color: Colors.red.shade900,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 Card(
                   child: ListTile(
                     leading: const CircleAvatar(child: Icon(Icons.music_note)),

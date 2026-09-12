@@ -8,6 +8,7 @@ import 'package:greens_app/models/team_member.dart';
 
 import 'skill_matrix_view.dart';
 import 'dance_builder_view.dart';
+import 'set_sheet_view.dart';
 
 class MainShell extends StatefulWidget {
   final TeamMember currentMember;
@@ -145,7 +146,7 @@ class _MainShellState extends State<MainShell> {
       //  initialMaf: true,
       //);
       case 3:
-        return const Center(child: Text('Set Sheet Workspace'));
+        return const SetSheetView();
       case 4:
         return widget.currentMember.isAdmin
             ? const AdminView()

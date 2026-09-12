@@ -1,6 +1,6 @@
 # Implementation Decisions
 
-Updated 2026-09-11.
+Updated 2026-09-12.
 
 ## Authentication
 
@@ -22,6 +22,16 @@ Updated 2026-09-11.
 - `invite-member` remains available for the older create-and-invite flow, but the primary UI flow is create profile first, invite later.
 - Admins can delete members through the server-side `delete-member` Edge Function. Self-deletion is blocked.
 
+## Set Sheet and assignment behavior
+
+- Set Sheet replaces the placeholder workspace and is a read-only booking/practice report with browser print-to-PDF.
+- It shows attending dancers above attending musicians, then renders each configured dance in a compact two-column formation layout.
+- Primary dancers are bold; all viable attending `L/Q/M` candidates remain visible even when a primary exists.
+- Non-compliant dances are greyed out when unique dancer coverage cannot satisfy every active position, including enabled MAF/MAB positions.
+- Practices are included in the Set Sheet selector as well as Bookings.
+- A primary dancer cannot be used in more than one position for the same booking and dance; this is checked in the UI and can be enforced with `20260912_unique_primary_dancers.sql`.
+- The Set Sheet no longer queries legacy `booking_set_layouts`; active output uses booking assignments/settings, RSVP data, competencies, roster, musicians, and dance catalog data.
+
 ## Server-side boundaries
 
 - Auth Admin APIs and service-role credentials must remain inside Supabase Edge Functions.
@@ -35,6 +45,9 @@ Updated 2026-09-11.
 ## Database decisions and open work
 
 - The live database contains both `team_members.instruments` and `musician_profiles`; consolidation is still undecided.
+- Booking-specific primary assignments are stored in `booking_dance_assignments`.
+- Booking-specific formation choices are stored in `booking_dance_settings`, keyed by booking and dance.
+- The new booking tables currently omit foreign keys because the SQL Editor role lacks `REFERENCES` permission on the existing tables. Add those constraints later using an owner-capable migration role after checking existing data.
 - Live RLS currently includes public unrestricted policies that conflict with the product security requirements. Policy hardening remains outstanding.
 - The live schema and policy snapshots are in `supabase-schema-current.md` and `supabase-policy-current.md`.
 - The migration `supabase/migrations/20260911_member_invitation_tracking.sql` must be applied before invitation tracking works.

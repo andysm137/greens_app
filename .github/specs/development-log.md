@@ -36,6 +36,14 @@ Primary roles:
 - Added persistent `booking_dance_settings` for per-booking/per-dance 8/12 position and MAF/MAB choices; builder changes now save immediately and reload for every leader.
 - Restored full Admin dance catalog configuration: standard positions default to 8 with a `Can be performed as 12` option, plus MAF/MAB toggles and notes; Skill Matrix reads these catalog properties per dance.
 - Updated Skill Matrix position columns to derive from `dance_catalog.standard_positions` instead of assuming eight positions.
+- Replaced the Set Sheet placeholder with a booking-level printable report: booking header, attending musicians/instruments, catalog/settings-driven dance tiles, 8/12 formation rows, MAF/MAB, bold primary dancers, alternate candidates, and browser print-to-PDF.
+- Removed the Set Sheet dependency on legacy `booking_set_layouts` after its table privileges could not be granted by the current Supabase SQL role; the report now uses booking assignments/settings as its active source.
+- Retained all viable dancer candidates in Set Sheet rows when a primary exists, added duplicate-primary warnings/blocking in Dance Builder, added a dance-level insufficient-dancers banner, and added a database uniqueness migration for one primary dancer per booking/dance.
+- Corrected the insufficient-dancers check to require a unique matching dancer across all active positions; one qualified dancer repeated across every position now triggers the warning.
+- Updated Set Sheet to include Practices, show attending dancers above musicians, and grey dance tiles that lack unique attending `L/Q/M` coverage for every active position.
+- Restored the Dance Builder formation graphic as a two-column grid, with centered MAF above and MAB below the numbered positions.
+- Fixed expanded booking RSVP content so member and leader attendance changes refresh immediately.
+- Limited booking status colors to the event header row so expanded RSVP content remains neutral.
 
 ## Current files and boundaries
 
@@ -58,6 +66,7 @@ Supabase:
 - `supabase/functions/delete-member/index.ts`
 - `supabase/migrations/20260912_booking_assignments.sql`: booking-scoped primary assignment table and RLS.
 - `supabase/migrations/20260912_booking_dance_settings.sql`: persistent booking/dance formation settings and RLS.
+- `supabase/migrations/20260912_unique_primary_dancers.sql`: database uniqueness constraint for one primary dancer per booking/dance.
 
 PWA deployment:
 
@@ -115,7 +124,11 @@ For PWA deployment:
 - The booking-scoped assignment migration must be applied before the new Dance Builder can save or load primary assignments.
 - The booking formation settings migration must be applied before MAF/MAB and 8/12 choices can persist.
 - Existing `dance_assignments` rows are legacy/global assignments and have not been automatically migrated into booking-scoped assignments.
+- The booking assignment/settings migrations intentionally omit foreign keys because the current SQL role lacks `REFERENCES` permission on existing tables; referential integrity remains a follow-up database-owner task.
+- `supabase/migrations/20260912_unique_primary_dancers.sql` requires a duplicate check before applying; it enforces one primary member per booking/dance across positions.
 - Builder candidates require an exact `competencies.dance_name` match for the selected catalog dance and an `event_rsvps.rsvp_status` of `Attending`; mismatched dance names or RSVP values will correctly exclude a member.
+- Set Sheet dance membership is currently inferred from `booking_dance_assignments` and `booking_dance_settings`; a dedicated booking-to-dance planning table may be needed if leaders must schedule dances before any builder/settings record exists.
+- `booking_set_layouts` is now a legacy table candidate for removal. Before dropping it, check/export any rows, remove the unused `BookingLayout` repository/model code, verify no deployed code references it, and confirm an owner-capable SQL role can perform the drop.
 
 ## Recommended next sequence
 
@@ -134,6 +147,7 @@ For PWA deployment:
 13. Add the signed-in Change Password account action.
 14. Complete responsive layouts for Events, Dance Builder, and Admin.
 15. Continue with booking validation and Set Sheet.
+16. Retire legacy `booking_set_layouts` after data preservation and owner-level permission checks.
 
 ## Session update rule
 
