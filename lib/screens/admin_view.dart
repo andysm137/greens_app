@@ -120,12 +120,37 @@ class _AdminViewState extends State<AdminView>
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send invitation: $error')),
+          SnackBar(content: Text(_invitationErrorMessage(error))),
         );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  String _invitationErrorMessage(Object error) {
+    final details = error.toString().toLowerCase();
+
+    if (details.contains('email rate limit exceeded') ||
+        details.contains('rate limit exceeded')) {
+      return 'Invitation not sent: Supabase email limit reached. Please wait before trying again.';
+    }
+    if (details.contains('invalid format') ||
+        details.contains('unable to validate email address')) {
+      return 'Invitation not sent: please check the email address format.';
+    }
+    if (details.contains('already been invited') ||
+        details.contains('already exists')) {
+      return 'Invitation not sent: this member already has an invitation or account.';
+    }
+    if (details.contains('admin access required')) {
+      return 'Invitation not sent: your admin session is not recognised by Supabase.';
+    }
+    if (details.contains('no email address')) {
+      return 'Invitation not sent: add an email address to this member first.';
+    }
+
+    return 'Failed to send invitation: $error';
   }
 
   Future<void> _deleteMember(TeamMember member) async {
