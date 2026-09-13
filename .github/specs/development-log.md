@@ -49,6 +49,40 @@ Primary roles:
 - Removed generated files from `web/`; source web files are now limited to `index.html`, `manifest.json`, `favicon.png`, and `icons/`.
 - Verified clean release build output under `build/web`.
 
+## Product TODOs
+
+Dance Builder:
+
+- [ ] Give a dancer a green background when they are not already primary in another position; use grey when they are already primary elsewhere.
+- [ ] Reduce the height of Dance Builder dropdowns and switches on mobile without clipping labels or controls.
+- [ ] Keep the insufficient-dancers warning fixed in the Dance Builder viewport instead of allowing it to scroll away.
+- [ ] Decide whether practices require dance building in the same way as performances.
+- [ ] Update Set Sheet planning so it shows the state of every possible dance, including dances that have not yet been built.
+- [ ] Add a dance summary row showing whether the available dancers and positions form a valid combination, without requiring primary assignments first.
+
+Set Sheet:
+
+- [ ] Fix mobile table layout so left-column text wraps or truncates without overflowing into the right column.
+- [ ] Format the printable/PDF Set Sheet for A4 paper, including page margins, repeatable headers, and sensible page breaks.
+
+Security and data integrity:
+
+- [ ] Rotate the exposed Supabase service-role key, reset the affected account password, and remove the temporary password-reset script.
+- [ ] Remove unrestricted public `ALL` policies from sensitive Supabase tables and replace them with least-privilege authenticated RLS policies.
+- [ ] Audit every direct write in `team_repository.dart` so role restrictions are enforced by RLS, not only by hidden UI screens.
+- [ ] Restrict privileged Edge Function CORS responses to approved application origins.
+- [ ] Make invitation and member-deletion workflows transactional or add reliable reconciliation for partial failures.
+- [ ] Replace the implicit password-reset redirect with an allowlist of approved application URLs.
+
+Reliability and structure:
+
+- [ ] Replace `dart:html` in Set Sheet with a supported printing/download boundary so WASM builds remain possible.
+- [ ] Cancel the `AuthGate` auth-state subscription in `dispose()`.
+- [ ] Remove the N+1 auth lookups and read-time writes from `member-auth-statuses`.
+- [ ] Replace the generated counter widget test with auth, RLS, repository, Dance Builder, and Set Sheet coverage.
+- [ ] Split the broad `team_repository.dart` into feature-specific services or repositories.
+- [ ] Choose one authoritative musician data model between `team_members.instruments` and `musician_profiles`.
+
 ## Current files and boundaries
 
 Flutter:
@@ -156,6 +190,9 @@ For PWA deployment:
 15. Continue with booking validation and Set Sheet.
 16. Retire legacy `booking_set_layouts` after data preservation and owner-level permission checks.
 17. Keep local web validation on the generated `build/web` directory, using `$webPath = (Resolve-Path .\build\web).Path` before starting `dhttpd`.
+18. Implement the Dance Builder and Set Sheet TODOs listed above, beginning with mobile layout and dancer-primary status styling.
+19. Address the Security and data integrity TODOs before expanding privileged administration features.
+20. Replace the generated widget test and then split the repository along feature boundaries.
 
 ## Session update rule
 
