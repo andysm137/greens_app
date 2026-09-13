@@ -188,168 +188,10 @@ class _EventsScreenState extends State<EventsScreen> {
 
   /// Builds a list of all team members and their current RSVP status for a given event.
   Widget _buildMembersRsvpList(String eventId) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      // Fetch all members from team_members
-      stream: _supabase
-          .from('team_members')
-          .stream(primaryKey: ['id'])
-          .order('full_name'),
-      builder: (context, membersSnapshot) {
-        if (!membersSnapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final members = membersSnapshot.data!;
-
-        return StreamBuilder<List<Map<String, dynamic>>>(
-          // Stream RSVPs for this specific event to support real-time UI updates
-          stream: _supabase
-              .from('event_rsvps')
-              .stream(primaryKey: ['id'])
-              .eq('event_id', eventId),
-          builder: (context, rsvpSnapshot) {
-            final rsvpMap = <String, String>{};
-            if (rsvpSnapshot.hasData) {
-              for (var rsvp in rsvpSnapshot.data!) {
-                rsvpMap[rsvp['member_id'].toString()] = rsvp['rsvp_status']
-                    .toString();
-              }
-            }
-
-            return Container(
-              margin: const EdgeInsets.symmetric(
-                horizontal: 12.0,
-                vertical: 8.0,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: members.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final member = members[index];
-                  final String memberId = member['id'].toString();
-                  final String memberName =
-                      member['full_name'] ?? 'Unknown Member';
-                  final String currentStatus =
-                      rsvpMap[memberId] ?? 'No Response';
-
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      memberName,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: widget.isLeaderOrAdmin
-                        ? const Text(
-                            'Tap a status to override response',
-                            style: TextStyle(fontSize: 10),
-                          )
-                        : null,
-                    trailing: widget.isLeaderOrAdmin
-                        ? _buildLeaderRsvpSelector(
-                            eventId,
-                            memberId,
-                            currentStatus,
-                          )
-                        : _buildMemberStatusBadge(currentStatus),
-                  );
-                },
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  /// Admin/Leader control: ChoiceChips to set any member's attendance response
-  Widget _buildLeaderRsvpSelector(
-    String eventId,
-    String memberId,
-    String currentStatus,
-  ) {
-    final statuses = ['Attending', 'Maybe', 'Not Attending'];
-
-    return Wrap(
-      spacing: 4,
-      children: statuses.map((status) {
-        final bool isSelected = currentStatus == status;
-        Color activeColor;
-        switch (status) {
-          case 'Attending':
-            activeColor = Colors.green;
-            break;
-          case 'Maybe':
-            activeColor = Colors.orange;
-            break;
-          default:
-            activeColor = Colors.red;
-        }
-
-        return ChoiceChip(
-          label: Text(
-            status == 'Not Attending'
-                ? 'No'
-                : (status == 'Attending' ? 'Yes' : 'Maybe'),
-            style: TextStyle(
-              fontSize: 10,
-              color: isSelected ? Colors.white : Colors.black87,
-            ),
-          ),
-          selected: isSelected,
-          selectedColor: activeColor,
-          visualDensity: VisualDensity.compact,
-          onSelected: (_) async {
-            await _supabase.from('event_rsvps').upsert({
-              'event_id': eventId,
-              'member_id': memberId,
-              'rsvp_status': status,
-              'updated_at': DateTime.now().toIso8601String(),
-            }, onConflict: 'event_id,member_id');
-          },
-        );
-      }).toList(),
-    );
-  }
-
-  /// Read-only status chip for standard team members
-  Widget _buildMemberStatusBadge(String status) {
-    Color color;
-    switch (status) {
-      case 'Attending':
-        color = Colors.green;
-        break;
-      case 'Maybe':
-        color = Colors.orange;
-        break;
-      case 'Not Attending':
-        color = Colors.red;
-        break;
-      default:
-        color = Colors.grey;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+    return _StableMembersRsvpList(
+      eventId: eventId,
+      isLeaderOrAdmin: widget.isLeaderOrAdmin,
+      supabase: _supabase,
     );
   }
 
@@ -572,6 +414,156 @@ class _EventStatusCardState extends State<_EventStatusCard> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _StableMembersRsvpList extends StatefulWidget {
+  final String eventId;
+  final bool isLeaderOrAdmin;
+  final SupabaseClient supabase;
+
+  const _StableMembersRsvpList({
+    required this.eventId,
+    required this.isLeaderOrAdmin,
+    required this.supabase,
+  });
+
+  @override
+  State<_StableMembersRsvpList> createState() => _StableMembersRsvpListState();
+}
+
+class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
+  late final Stream<List<Map<String, dynamic>>> _membersStream;
+  late final Stream<List<Map<String, dynamic>>> _rsvpStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _membersStream = widget.supabase
+        .from('team_members')
+        .stream(primaryKey: ['id'])
+        .order('full_name');
+    _rsvpStream = widget.supabase
+        .from('event_rsvps')
+        .stream(primaryKey: ['id'])
+        .eq('event_id', widget.eventId);
+  }
+
+  Future<void> _updateRsvp(String memberId, String status) async {
+    await widget.supabase.from('event_rsvps').upsert({
+      'event_id': widget.eventId,
+      'member_id': memberId,
+      'rsvp_status': status,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'event_id,member_id');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _membersStream,
+      builder: (context, membersSnapshot) {
+        if (!membersSnapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        return StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _rsvpStream,
+          builder: (context, rsvpSnapshot) {
+            final rsvpMap = <String, String>{};
+            for (final rsvp in rsvpSnapshot.data ?? const []) {
+              rsvpMap[rsvp['member_id'].toString()] =
+                  rsvp['rsvp_status'].toString();
+            }
+
+            final members = membersSnapshot.data!;
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: members.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final member = members[index];
+                  final memberId = member['id'].toString();
+                  final status = rsvpMap[memberId] ?? 'No Response';
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      member['full_name'] ?? 'Unknown Member',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: widget.isLeaderOrAdmin
+                        ? const Text(
+                            'Tap a status to override response',
+                            style: TextStyle(fontSize: 10),
+                          )
+                        : null,
+                    trailing: widget.isLeaderOrAdmin
+                        ? Wrap(
+                            spacing: 4,
+                            children: [
+                              _statusChoice(memberId, status, 'Attending', 'Yes', Colors.green),
+                              _statusChoice(memberId, status, 'Maybe', 'Maybe', Colors.orange),
+                              _statusChoice(memberId, status, 'Not Attending', 'No', Colors.red),
+                            ],
+                          )
+                        : _statusBadge(status),
+                  );
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _statusChoice(
+    String memberId,
+    String currentStatus,
+    String status,
+    String label,
+    Color color,
+  ) {
+    final selected = currentStatus == status;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: selected ? Colors.white : Colors.black87,
+        ),
+      ),
+      selected: selected,
+      selectedColor: color,
+      visualDensity: VisualDensity.compact,
+      onSelected: (_) => _updateRsvp(memberId, status),
+    );
+  }
+
+  Widget _statusBadge(String status) {
+    final color = switch (status) {
+      'Attending' => Colors.green,
+      'Maybe' => Colors.orange,
+      'Not Attending' => Colors.red,
+      _ => Colors.grey,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color),
+      ),
+      child: Text(status, style: TextStyle(color: color, fontSize: 11)),
     );
   }
 }
