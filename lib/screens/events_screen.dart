@@ -75,20 +75,23 @@ class _EventsScreenState extends State<EventsScreen> {
           final todayOnly = DateTime(today.year, today.month, today.day);
           final visibleEvents = _hidePastEvents
               ? events
-                  .where(
-                    (event) => !DateTime(
-                      event.eventDate.year,
-                      event.eventDate.month,
-                      event.eventDate.day,
-                    ).isBefore(todayOnly),
-                  )
-                  .toList()
+                    .where(
+                      (event) => !DateTime(
+                        event.eventDate.year,
+                        event.eventDate.month,
+                        event.eventDate.day,
+                      ).isBefore(todayOnly),
+                    )
+                    .toList()
               : events;
 
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -166,7 +169,9 @@ class _EventsScreenState extends State<EventsScreen> {
         int attendingMusicians = 0;
 
         if (snapshot.hasData) {
-          final rsvps = List<Map<String, dynamic>>.from(snapshot.data![0] as List);
+          final rsvps = List<Map<String, dynamic>>.from(
+            snapshot.data![0] as List,
+          );
           final musicianIds = (snapshot.data![1] as List)
               .map((item) => item['member_id'].toString())
               .toSet();
@@ -325,7 +330,11 @@ class _EventsScreenState extends State<EventsScreen> {
                     );
                     if (picked != null) {
                       setDialogState(() {
-                        selectedDate = DateTime(picked.year, picked.month, picked.day);
+                        selectedDate = DateTime(
+                          picked.year,
+                          picked.month,
+                          picked.day,
+                        );
                       });
                     }
                   },
@@ -463,11 +472,19 @@ class _EventStatusCardState extends State<_EventStatusCard> {
             Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   child: Row(
                     children: [
-                      if (event.location != null && event.location!.isNotEmpty) ...[
-                        const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                      if (event.location != null &&
+                          event.location!.isNotEmpty) ...[
+                        const Icon(
+                          Icons.location_on,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
                         const SizedBox(width: 4),
                         Expanded(child: Text(event.location!)),
                       ] else
@@ -487,7 +504,7 @@ class _EventStatusCardState extends State<_EventStatusCard> {
                 const Divider(),
                 widget.rsvpSectionBuilder(),
                 widget.membersRsvpListBuilder(),
-                if (widget.isLeaderOrAdmin ) 
+                if (widget.isLeaderOrAdmin)
                   Padding(
                     padding: const EdgeInsets.all(8),
                     child: Row(
@@ -593,20 +610,23 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
   Future<void> _save() async {
     setState(() => _isSaving = true);
     try {
-      await Supabase.instance.client.from('events').update({
-        'title': _titleController.text.trim(),
-        'event_date': DateTime(
-          _selectedDate.year,
-          _selectedDate.month,
-          _selectedDate.day,
-        ).toIso8601String(),
-        'location': _locationController.text.trim().isEmpty
-            ? null
-            : _locationController.text.trim(),
-        'description': _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
-      }).eq('id', widget.event.id);
+      await Supabase.instance.client
+          .from('events')
+          .update({
+            'title': _titleController.text.trim(),
+            'event_date': DateTime(
+              _selectedDate.year,
+              _selectedDate.month,
+              _selectedDate.day,
+            ).toIso8601String(),
+            'location': _locationController.text.trim().isEmpty
+                ? null
+                : _locationController.text.trim(),
+            'description': _descriptionController.text.trim().isEmpty
+                ? null
+                : _descriptionController.text.trim(),
+          })
+          .eq('id', widget.event.id);
       widget.onSaved();
       if (mounted) Navigator.pop(context);
     } catch (error) {
@@ -719,6 +739,7 @@ class _StableMembersRsvpList extends StatefulWidget {
 
 class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
   late final Stream<List<Map<String, dynamic>>> _membersStream;
+  late final Stream<List<Map<String, dynamic>>> _musicianProfilesStream;
   late final Stream<List<Map<String, dynamic>>> _rsvpStream;
   final Map<String, String> _optimisticStatuses = {};
 
@@ -729,6 +750,9 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
         .from('team_members')
         .stream(primaryKey: ['id'])
         .order('full_name');
+    _musicianProfilesStream = widget.supabase
+        .from('musician_profiles')
+        .stream(primaryKey: ['member_id']);
     _rsvpStream = widget.supabase
         .from('event_rsvps')
         .stream(primaryKey: ['id'])
@@ -771,64 +795,151 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
         }
 
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _rsvpStream,
-          builder: (context, rsvpSnapshot) {
-            final rsvpMap = <String, String>{};
-            for (final rsvp in rsvpSnapshot.data ?? const []) {
-              rsvpMap[rsvp['member_id'].toString()] =
-                  rsvp['rsvp_status'].toString();
+          stream: _musicianProfilesStream,
+          builder: (context, musicianProfilesSnapshot) {
+            if (!musicianProfilesSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
             }
 
-            final members = membersSnapshot.data!;
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: members.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final member = members[index];
-                  final memberId = member['id'].toString();
-                    final status =
-                      _optimisticStatuses[memberId] ??
-                      rsvpMap[memberId] ??
-                      'No Response';
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      member['full_name'] ?? 'Unknown Member',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: widget.isLeaderOrAdmin
-                        ? const Text(
-                            'Tap a status to override response',
-                            style: TextStyle(fontSize: 10),
-                          )
-                        : null,
-                    trailing: widget.isLeaderOrAdmin
-                        ? Wrap(
-                            spacing: 4,
-                            children: [
-                              _statusChoice(memberId, status, 'Attending', 'Yes', Colors.green),
-                              _statusChoice(memberId, status, 'Maybe', 'Maybe', Colors.orange),
-                              _statusChoice(memberId, status, 'Not Attending', 'No', Colors.red),
-                            ],
-                          )
-                        : _statusBadge(status),
-                  );
-                },
-              ),
+            return StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _rsvpStream,
+              builder: (context, rsvpSnapshot) {
+                final rsvpMap = <String, String>{};
+                for (final rsvp in rsvpSnapshot.data ?? const []) {
+                  rsvpMap[rsvp['member_id'].toString()] = rsvp['rsvp_status']
+                      .toString();
+                }
+
+                final members = membersSnapshot.data!;
+                final musicianIds = musicianProfilesSnapshot.data!
+                    .map((profile) => profile['member_id'].toString())
+                    .toSet();
+                final musicians =
+                    members
+                        .where(
+                          (member) =>
+                              musicianIds.contains(member['id'].toString()),
+                        )
+                        .toList()
+                      ..sort(_compareByFirstName);
+                final dancers =
+                    members
+                        .where(
+                          (member) =>
+                              !musicianIds.contains(member['id'].toString()),
+                        )
+                        .toList()
+                      ..sort(_compareByFirstName);
+                final groupedMembers =
+                    <({String? heading, Map<String, dynamic>? member})>[
+                      (heading: 'Musicians', member: null),
+                      ...musicians.map(
+                        (member) => (heading: null, member: member),
+                      ),
+                      (heading: 'Dancers', member: null),
+                      ...dancers.map(
+                        (member) => (heading: null, member: member),
+                      ),
+                    ];
+                return Container(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: groupedMembers.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final item = groupedMembers[index];
+                      if (item.heading != null) {
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                          child: Text(
+                            item.heading!,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        );
+                      }
+
+                      final member = item.member!;
+                      final memberId = member['id'].toString();
+                      final status =
+                          _optimisticStatuses[memberId] ??
+                          rsvpMap[memberId] ??
+                          'No Response';
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          member['full_name'] ?? 'Unknown Member',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: widget.isLeaderOrAdmin
+                            ? const Text(
+                                'Tap a status to override response',
+                                style: TextStyle(fontSize: 10),
+                              )
+                            : null,
+                        trailing: widget.isLeaderOrAdmin
+                            ? Wrap(
+                                spacing: 4,
+                                children: [
+                                  _statusChoice(
+                                    memberId,
+                                    status,
+                                    'Attending',
+                                    'Yes',
+                                    Colors.green,
+                                  ),
+                                  _statusChoice(
+                                    memberId,
+                                    status,
+                                    'Maybe',
+                                    'Maybe',
+                                    Colors.orange,
+                                  ),
+                                  _statusChoice(
+                                    memberId,
+                                    status,
+                                    'Not Attending',
+                                    'No',
+                                    Colors.red,
+                                  ),
+                                ],
+                              )
+                            : _statusBadge(status),
+                      );
+                    },
+                  ),
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  int _compareByFirstName(
+    Map<String, dynamic> left,
+    Map<String, dynamic> right,
+  ) {
+    final leftName = left['full_name']?.toString().trim() ?? '';
+    final rightName = right['full_name']?.toString().trim() ?? '';
+    final leftFirstName = leftName.split(RegExp(r'\s+')).firstOrNull ?? '';
+    final rightFirstName = rightName.split(RegExp(r'\s+')).firstOrNull ?? '';
+    final firstNameOrder = leftFirstName.toLowerCase().compareTo(
+      rightFirstName.toLowerCase(),
+    );
+    return firstNameOrder != 0
+        ? firstNameOrder
+        : leftName.toLowerCase().compareTo(rightName.toLowerCase());
   }
 
   Widget _statusChoice(

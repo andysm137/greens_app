@@ -56,6 +56,11 @@ Primary roles:
 - Diagnosed stale local web builds: generated `main.dart.js` and related runtime/assets had been committed inside `web/` and could overwrite the fresh compiler output during packaging.
 - Removed generated files from `web/`; source web files are now limited to `index.html`, `manifest.json`, `favicon.png`, and `icons/`.
 - Verified clean release build output under `build/web`.
+- Grouped leader/admin event RSVP rosters into alphabetized Musicians and Dancers for every event type.
+- Updated Dance Builder event selection to show date-sorted event labels, hide past events by default, and provide the same past-event toggle as Events & Practices.
+- Ordered Dance Builder candidates with the primary dancer first and bold, then `YP` before `Y`, with ascending same-rating position coverage and full-name tie breaks; candidate names use the Skills Matrix rating colors.
+- Made paired Dance Builder position cards match the height of the tallest wrapped candidate list in their row.
+- Updated Set Sheet position lists to mirror Dance Builder candidate eligibility, order, primary emphasis, and `YP`/`Y` name colors; paired rows now share the tallest wrapped row height.
 
 ## Product TODOs
 
@@ -65,13 +70,15 @@ Dance Builder:
 - [ ] Reduce the height of Dance Builder dropdowns and switches on mobile without clipping labels or controls.
 - [ ] Keep the insufficient-dancers warning fixed in the Dance Builder viewport instead of allowing it to scroll away.
 - [ ] Decide whether practices require dance building in the same way as performances.
+- [ ] Add widget coverage for event filtering and the candidate ordering rules: primary, `YP`/`Y`, position coverage, and full-name ties.
 - [ ] Update Set Sheet planning so it shows the state of every possible dance, including dances that have not yet been built.
 - [ ] Add a dance summary row showing whether the available dancers and positions form a valid combination, without requiring primary assignments first.
 
 Set Sheet:
 
-- [ ] Fix mobile table layout so left-column text wraps or truncates without overflowing into the right column.
+- [ ] Validate the equal-height, wrapped candidate rows on narrow mobile layouts and the printed output; adjust column sizing if long names still overflow.
 - [ ] Format the printable/PDF Set Sheet for A4 paper, including page margins, repeatable headers, and sensible page breaks.
+- [ ] Add widget coverage that verifies Set Sheet candidate presentation remains aligned with Dance Builder.
 
 Bookings:
 
@@ -102,6 +109,9 @@ Flutter:
 - `lib/main.dart`: Supabase initialization and app root.
 - `lib/screens/auth_gate.dart`: session routing and sign-in.
 - `lib/screens/main_shell.dart`: authenticated navigation and role display.
+- `lib/screens/events_screen.dart`: event list, RSVP controls, and grouped musician/dancer roster.
+- `lib/screens/dance_builder_view.dart`: event filtering, attendance-aware lineup candidates, primary assignments, and equal-height position matrix rows.
+- `lib/screens/set_sheet_view.dart`: printable event set sheet with Dance Builder-aligned candidate lists and equal-height position rows.
 - `lib/screens/admin_view.dart`: roster, profile editing, invitations, deletion, and catalog administration.
 - `lib/services/team_repository.dart`: current data access, still broad and due for feature-specific separation.
 - `lib/services/admin_auth_service.dart`: Edge Function calls for admin member operations.
@@ -163,6 +173,7 @@ For PWA deployment:
 
 - Live RLS contains unrestricted public policies on several tables. This conflicts with the product security requirements and must be hardened deliberately.
 - `team_members.instruments` and `musician_profiles` both exist. Choose one authoritative musician model before expanding musician features.
+- Dance Builder identifies musicians from `team_members.instruments`, while Set Sheet's musician summary also consults `musician_profiles`; align these checks when selecting the authoritative model.
 - Auth profile linkage currently supports both legacy `team_members.id` and `auth_user_id`; standardize this later.
 - Existing widget test is stale and must be replaced with app-specific tests.
 - `events_screen.dart` has an existing `use_build_context_synchronously` lint.

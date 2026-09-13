@@ -29,6 +29,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
   int _positionCount = 8;
   bool _includeMaf = false;
   bool _includeMab = false;
+  bool _hidePastEvents = true;
   bool _isLoading = true;
 
   Map<String, dynamic>? get _dance {
@@ -37,6 +38,21 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
     }
     return null;
   }
+
+  bool _isPastEvent(EventModel event) {
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final eventDate = DateTime(
+      event.eventDate.year,
+      event.eventDate.month,
+      event.eventDate.day,
+    );
+    return eventDate.isBefore(todayOnly);
+  }
+
+  List<EventModel> get _visibleEvents => _hidePastEvents
+      ? _events.where((event) => !_isPastEvent(event)).toList()
+      : _events;
 
   @override
   void initState() {
@@ -59,8 +75,10 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
         _events = (eventResponse as List)
             .map((item) => EventModel.fromMap(item))
             .toList();
-        _selectedDance ??= dances.isEmpty ? null : dances.first['dance_name'] as String;
-        _selectedEvent ??= _nextBooking(_events);
+        _selectedDance ??= dances.isEmpty
+            ? null
+            : dances.first['dance_name'] as String;
+        _selectedEvent ??= _firstAvailableEvent(_events);
       });
       await _refreshBookingData();
     } catch (error) {
@@ -74,22 +92,24 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
     }
   }
 
-  EventModel? _nextBooking(List<EventModel> events) {
-    final now = DateTime.now();
-    final upcomingBookings = events
-        .where((event) =>
-            event.eventType == 'Booking' &&
-            !event.eventDate.isBefore(now))
-        .toList()
-      ..sort((a, b) => a.eventDate.compareTo(b.eventDate));
+  EventModel? _firstAvailableEvent(List<EventModel> events) {
+    final upcomingEvents = events.where((event) => !_isPastEvent(event));
+    if (upcomingEvents.isNotEmpty) return upcomingEvents.first;
+    return events.isEmpty ? null : events.first;
+  }
 
-    if (upcomingBookings.isNotEmpty) return upcomingBookings.first;
-
-    final bookings = events
-        .where((event) => event.eventType == 'Booking')
-        .toList()
-      ..sort((a, b) => a.eventDate.compareTo(b.eventDate));
-    return bookings.isEmpty ? (events.isEmpty ? null : events.first) : bookings.first;
+  Future<void> _setHidePastEvents(bool hidePastEvents) async {
+    final visibleEvents = hidePastEvents
+        ? _events.where((event) => !_isPastEvent(event)).toList()
+        : _events;
+    final selectedEvent = visibleEvents.contains(_selectedEvent)
+        ? _selectedEvent
+        : (visibleEvents.isEmpty ? null : visibleEvents.first);
+    setState(() {
+      _hidePastEvents = hidePastEvents;
+      _selectedEvent = selectedEvent;
+    });
+    await _refreshBookingData();
   }
 
   Future<void> _refreshBookingData() async {
@@ -123,7 +143,8 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
         for (final item in assignments)
           item['position_number'] as int: item['member_id'].toString(),
       };
-      _positionCount = settings?['standard_positions'] as int? ??
+      _positionCount =
+          settings?['standard_positions'] as int? ??
           (_dance?['standard_positions'] == 12 ? 12 : 8);
       _includeMaf = settings?['has_maf'] as bool? ?? _dance?['has_maf'] == true;
       _includeMab = settings?['has_mab'] as bool? ?? _dance?['has_mab'] == true;
@@ -145,29 +166,77 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
 
   Competency? _competency(String memberId, int position) {
     for (final item in _competencies) {
-      if (item.memberId == memberId && item.positionNumber == position) return item;
+      if (item.memberId == memberId && item.positionNumber == position) {
+        return item;
+      }
     }
     return null;
   }
 
   List<TeamMember> _candidates(int position) {
-    return _members.where((member) {
+    final candidates = _members.where((member) {
       if (member.isMusician || !_attendingIds.contains(member.id)) return false;
       final competency = _competency(member.id, position);
-        return competency != null &&
-            (competency.proficiencyLevel == 'YP' ||
+      return competency != null &&
+          (competency.proficiencyLevel == 'YP' ||
               competency.proficiencyLevel == 'Y');
     }).toList();
+    candidates.sort((left, right) => _compareCandidates(position, left, right));
+    return candidates;
+  }
+
+  int _competentPositionCount(String memberId, String proficiencyLevel) {
+    return _competencies
+        .where(
+          (competency) =>
+              competency.memberId == memberId &&
+              competency.proficiencyLevel == proficiencyLevel,
+        )
+        .map((competency) => competency.positionNumber)
+        .toSet()
+        .length;
+  }
+
+  int _compareCandidates(int position, TeamMember left, TeamMember right) {
+    final primaryId = _primaryByPosition[position];
+    if (left.id == primaryId) return -1;
+    if (right.id == primaryId) return 1;
+
+    final leftLevel = _competency(left.id, position)!.proficiencyLevel;
+    final rightLevel = _competency(right.id, position)!.proficiencyLevel;
+    if (leftLevel != rightLevel) return leftLevel == 'YP' ? -1 : 1;
+
+    final countComparison = _competentPositionCount(
+      left.id,
+      leftLevel,
+    ).compareTo(_competentPositionCount(right.id, leftLevel));
+    if (countComparison != 0) return countComparison;
+    return left.fullName.compareTo(right.fullName);
+  }
+
+  Color _competencyColor(String proficiencyLevel) {
+    switch (proficiencyLevel) {
+      case 'YP':
+        return Colors.green.shade400;
+      case 'Y':
+        return Colors.purple.shade300;
+      case 'L':
+        return Colors.orange.shade300;
+      default:
+        return Colors.grey.shade300;
+    }
   }
 
   List<TeamMember> _musicians() {
     return _members.where((member) {
-      if (!member.isMusician || !_attendingIds.contains(member.id)) return false;
+      if (!member.isMusician || !_attendingIds.contains(member.id)) {
+        return false;
+      }
       return _competencies.any(
-        (item) => item.memberId == member.id &&
+        (item) =>
+            item.memberId == member.id &&
             item.positionNumber == 0 &&
-            (item.proficiencyLevel == 'YP' ||
-              item.proficiencyLevel == 'Y'),
+            (item.proficiencyLevel == 'YP' || item.proficiencyLevel == 'Y'),
       );
     }).toList();
   }
@@ -216,7 +285,9 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
         content: SizedBox(
           width: double.maxFinite,
           child: candidates.isEmpty
-              ? const Text('No attending qualified or master dancers are available.')
+              ? const Text(
+                  'No attending qualified or master dancers are available.',
+                )
               : ListView(
                   shrinkWrap: true,
                   children: candidates.map((member) {
@@ -226,7 +297,10 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                       title: Text(
                         member.fullName,
                         style: TextStyle(
-                          fontWeight: isPrimary ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isPrimary
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: _competencyColor(competency.proficiencyLevel),
                         ),
                       ),
                       subtitle: Text(competency.proficiencyLevel),
@@ -299,16 +373,22 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
         content: SizedBox(
           width: double.maxFinite,
           child: musicians.isEmpty
-              ? const Text('No attending musicians have a competency for this dance.')
+              ? const Text(
+                  'No attending musicians have a competency for this dance.',
+                )
               : ListView(
                   shrinkWrap: true,
                   children: musicians.map((member) {
                     final competency = _competencies.firstWhere(
-                      (item) => item.memberId == member.id && item.positionNumber == 0,
+                      (item) =>
+                          item.memberId == member.id &&
+                          item.positionNumber == 0,
                     );
                     return ListTile(
                       title: Text(member.fullName),
-                      subtitle: Text('${member.instruments ?? 'Musician'} - ${competency.proficiencyLevel}'),
+                      subtitle: Text(
+                        '${member.instruments ?? 'Musician'} - ${competency.proficiencyLevel}',
+                      ),
                     );
                   }).toList(),
                 ),
@@ -326,7 +406,9 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
   Widget _positionCard(int position, String label) {
     final candidates = _candidates(position);
     final primaryId = _primaryByPosition[position];
-    final primary = candidates.where((member) => member.id == primaryId).firstOrNull;
+    final primary = candidates
+        .where((member) => member.id == primaryId)
+        .firstOrNull;
     final unavailable = candidates.isEmpty;
 
     return Card(
@@ -341,7 +423,10 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
               CircleAvatar(
                 radius: 14,
                 backgroundColor: unavailable ? Colors.red : Colors.indigo,
-                child: Text('$position', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                child: Text(
+                  '$position',
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -350,11 +435,31 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                   runSpacing: 2,
                   children: [
                     if (primary != null)
-                      Text(primary.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    for (final member in candidates.where((item) => item.id != primaryId))
-                      Text(member.fullName),
+                      Text(
+                        primary.fullName,
+                        style: TextStyle(
+                          color: _competencyColor(
+                            _competency(primary.id, position)!.proficiencyLevel,
+                          ),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    for (final member in candidates.where(
+                      (item) => item.id != primaryId,
+                    ))
+                      Text(
+                        member.fullName,
+                        style: TextStyle(
+                          color: _competencyColor(
+                            _competency(member.id, position)!.proficiencyLevel,
+                          ),
+                        ),
+                      ),
                     if (unavailable)
-                      Text('No qualified attending dancer', style: TextStyle(color: Colors.red.shade700)),
+                      Text(
+                        'No qualified attending dancer',
+                        style: TextStyle(color: Colors.red.shade700),
+                      ),
                   ],
                 ),
               ),
@@ -370,17 +475,19 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
     final rows = <Widget>[];
     for (var position = 1; position <= _positionCount; position += 2) {
       rows.add(
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _positionCard(position, 'Position $position')),
-            const SizedBox(width: 8),
-            Expanded(
-              child: position + 1 <= _positionCount
-                  ? _positionCard(position + 1, 'Position ${position + 1}')
-                  : const SizedBox(),
-            ),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _positionCard(position, 'Position $position')),
+              const SizedBox(width: 8),
+              Expanded(
+                child: position + 1 <= _positionCount
+                    ? _positionCard(position + 1, 'Position ${position + 1}')
+                    : const SizedBox(),
+              ),
+            ],
+          ),
         ),
       );
       rows.add(const SizedBox(height: 8));
@@ -408,7 +515,10 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Dance Builder & Lineup Selector', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text(
+            'Dance Builder & Lineup Selector',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 12),
           Card(
             child: Padding(
@@ -416,22 +526,57 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
               child: Column(
                 children: [
                   DropdownButtonFormField<EventModel>(
-                    initialValue: _selectedEvent,
+                    initialValue: _visibleEvents.contains(_selectedEvent)
+                        ? _selectedEvent
+                        : null,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Booking', border: OutlineInputBorder()),
-                    items: _events.map((event) => DropdownMenuItem(value: event, child: Text('${event.title} (${event.eventType})'))).toList(),
+                    decoration: const InputDecoration(
+                      labelText: 'Event',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _visibleEvents
+                        .map(
+                          (event) => DropdownMenuItem(
+                            value: event,
+                            child: Text(
+                              '${event.title} - ${event.eventDate.day}/${event.eventDate.month}/${event.eventDate.year}',
+                            ),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (event) async {
                       if (event == null) return;
                       setState(() => _selectedEvent = event);
                       await _refreshBookingData();
                     },
                   ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      const Text('Hide past events'),
+                      Switch(
+                        value: _hidePastEvents,
+                        onChanged: _setHidePastEvents,
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: _selectedDance,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Dance', border: OutlineInputBorder()),
-                    items: _dances.map((dance) => DropdownMenuItem(value: dance['dance_name'] as String, child: Text(dance['dance_name'] as String))).toList(),
+                    decoration: const InputDecoration(
+                      labelText: 'Dance',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _dances
+                        .map(
+                          (dance) => DropdownMenuItem(
+                            value: dance['dance_name'] as String,
+                            child: Text(dance['dance_name'] as String),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (dance) async {
                       if (dance == null) return;
                       setState(() => _selectedDance = dance);
@@ -498,7 +643,9 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                   child: ListTile(
                     leading: const CircleAvatar(child: Icon(Icons.music_note)),
                     title: const Text('Musicians'),
-                    subtitle: Text('${_musicians().length} attending qualified musicians'),
+                    subtitle: Text(
+                      '${_musicians().length} attending qualified musicians',
+                    ),
                     onTap: _showMusicianDialog,
                   ),
                 ),
