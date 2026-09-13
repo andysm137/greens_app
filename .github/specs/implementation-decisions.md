@@ -56,4 +56,5 @@ Updated 2026-09-12.
 - The migration `supabase/migrations/20260911_member_invitation_tracking.sql` must be applied before invitation tracking works.
 - The migration `supabase/migrations/20260913_record_member_invitation.sql` must be applied before `invite-existing-member` can record `auth_user_id` and `invited_at` without direct table update privileges.
 - The migration `supabase/migrations/20260913_admin_member_operations.sql` must be applied before the legacy invite, delete, and registration-status functions can perform their protected operations.
+- The migration `supabase/migrations/20260913_member_competency_access.sql` grants members access only to competency rows linked to their own Auth/profile identity; leaders/admins retain broader competency access.
 - Edge Functions must be deployed after changes before the Flutter workflow can use them.

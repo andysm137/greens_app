@@ -46,6 +46,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
   @override
   void initState() {
     super.initState();
+    if (!widget.currentMember.isLeader && !widget.currentMember.isAdmin) {
+      _currentMode = MatrixMode.byDancer;
+    }
     _loadInitialData();
   }
 

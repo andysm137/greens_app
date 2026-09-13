@@ -43,6 +43,7 @@ Primary roles:
 - Updated Set Sheet to include Practices, show attending dancers above musicians, and grey dance tiles that lack unique attending `L/Q/M` coverage for every active position.
 - Added date-only event creation, optional event descriptions, date-only booking display, and an expanded Details dialog beside the location; event type remains stored but is no longer shown in the card header.
 - Restricted member Booking access to their own RSVP controls, added leader/admin dancer and musician attendance summaries, and restricted member Skill Matrix access to their own By Dancer view.
+- Fixed the member Skill Matrix mode initialization so the own-competency query runs, and added `20260913_member_competency_access.sql` for authenticated own-record competency SELECT/INSERT/UPDATE access.
 - Changed the competency scale to `L` Learner, `YP` Yes with a practice, and `Y` Ok; Dance Builder and Set Sheet use only `YP/Y` as performer-ready levels.
 - Added the unset competency state `-`; the Skill Matrix now cycles `- -> L -> YP -> Y -> -`, and the migration normalizes null/unknown legacy values to `-`.
 - Created a fresh local release PWA build with `flutter build web --release --base-href "/SilkstoneGreensApp/"`; output is in `build/web` with `404.html` copied for client-side routing.
