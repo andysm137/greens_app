@@ -52,3 +52,10 @@ build/
 
 # Generated web files
 web/flutter_service_worker.js
+web/main.dart.js
+web/flutter.js
+web/flutter_bootstrap.js
+web/version.json
+web/.last_build_id
+web/assets/
+web/canvaskit/

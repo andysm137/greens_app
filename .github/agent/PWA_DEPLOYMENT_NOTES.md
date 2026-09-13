@@ -13,16 +13,16 @@
 - **Workflow File:** `.github/workflows/static.yml` in greens_app
 - **Deployment Method:** Cross-repo deployment using `PAGES_REPO_TOKEN`
 
-### 2. ✅ Fixed .gitignore
+### 2. ✅ Fixed generated web output tracking
 **File:** `.gitignore`  
 **Commit:** `16a33a3aa3a74b85128be50f086c8846a8266116`
 
 **Changes Made:**
-- Uncommented `/build/` on line 33 (was `# /build/` → now `/build/`)
-- Added explicit `build/` pattern for web build output
-- Added `web/flutter_service_worker.js` to excludes
+- Kept `/build/` and `build/` ignored.
+- Removed generated Flutter output that had been committed inside `web/`.
+- Added ignore rules for generated `web/` runtime files, assets, CanvasKit files, and build markers.
 
-**Why:** Build artifacts were being committed to git (3+ days old), preventing fresh builds from deploying
+**Why:** An old `web/main.dart.js` was being copied into `build/web`, replacing the fresh `dart2js` output during packaging.
 
 ### 3. ✅ Created Deployment Branch
 **Branch:** `setup-pwa-deploy` created in SilkstoneGreensApp  
@@ -33,10 +33,10 @@
 ## Identified Issues
 
 ### Issue 1: Stale Build Files ⚠️
-- **Status:** FIXED (see .gitignore update above)
-- **Problem:** `build/web/main.dart.js` last updated Sept 7, but Flutter code changed Sept 10-11
-- **Root Cause:** `/build/` was commented out in `.gitignore`, so old builds persisted in git
-- **Solution:** Uncommented `/build/` in .gitignore
+- **Status:** FIXED
+- **Problem:** `build/web/main.dart.js` remained old even though debug mode showed current code.
+- **Root Cause:** A generated `web/main.dart.js` was committed in the source web directory and overwrote fresh compiler output.
+- **Solution:** Removed generated files from `web/` and added ignore rules for them. Fresh output belongs only in `build/web`.
 
 ### Issue 2: Deployment Failing Silently ❌
 - **Status:** NEEDS INVESTIGATION
@@ -76,7 +76,7 @@ Steps:
 ✅ **Already Configured in greens_app:**
 - `web/manifest.json` - PWA metadata (app name, icons, display mode)
 - `web/index.html` - Links manifest and flutter_bootstrap.js
-- Service worker - Flutter web includes this automatically
+- Service worker - Flutter generates this automatically into `build/web`
 - Icons - Multiple sizes (192px, 512px, maskable variants)
 - Display mode - Standalone (app-like experience)
 
@@ -128,6 +128,10 @@ flutter build web --release --base-href "/SilkstoneGreensApp/"
 # Built files will be in: build/web/
 # Main app file: build/web/main.dart.js
 # Config: build/web/manifest.json
+
+# For local static hosting on Windows, preserve spaces in the project path:
+$webPath = (Resolve-Path .\build\web).Path
+dart pub global run dhttpd --path $webPath --port 8091
 ```
 
 ---

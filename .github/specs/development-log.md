@@ -1,6 +1,6 @@
 # Greens Development Breadcrumb
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
 
 This file preserves the current implementation context for future development sessions. It records decisions and verified state, not every conversation detail.
 
@@ -45,6 +45,9 @@ Primary roles:
 - Restored the Dance Builder formation graphic as a two-column grid, with centered MAF above and MAB below the numbered positions.
 - Fixed expanded booking RSVP content so member and leader attendance changes refresh immediately.
 - Limited booking status colors to the event header row so expanded RSVP content remains neutral.
+- Diagnosed stale local web builds: generated `main.dart.js` and related runtime/assets had been committed inside `web/` and could overwrite the fresh compiler output during packaging.
+- Removed generated files from `web/`; source web files are now limited to `index.html`, `manifest.json`, `favicon.png`, and `icons/`.
+- Verified clean release build output under `build/web`.
 
 ## Current files and boundaries
 
@@ -77,7 +80,9 @@ PWA deployment:
 - Deployment method: build Flutter web in `greens_app`, then publish `build/web` to the target repository using `PAGES_REPO_TOKEN`.
 - Expected public URL: `https://andysm137.github.io/SilkstoneGreensApp/`.
 - Expected build command: `flutter build web --release --base-href "/SilkstoneGreensApp/"`.
-- The PWA manifest, icons, standalone display mode, and Flutter web service worker are already configured according to the deployment notes.
+- The PWA manifest, icons, and standalone display mode are source-controlled; Flutter generates the service worker and runtime files into `build/web`.
+- The source `web/` directory must not contain generated `main.dart.js`, `flutter.js`, `flutter_bootstrap.js`, `flutter_service_worker.js`, `version.json`, `assets/`, or `canvaskit/` files.
+- For local static hosting from this Windows path, assign the resolved path to a variable before passing it to `dhttpd`; otherwise spaces in `Documents\Flutter code` are split into separate arguments.
 
 Documentation:
 
@@ -120,8 +125,8 @@ For PWA deployment:
 - Password reset redirects require Supabase Auth URL configuration for the active local debug URL and the current GitHub Pages URL; previously issued reset emails may still use the old redirect.
 - Edge Function deployment is external to Flutter analysis; local code can compile while deployed functions remain stale.
 - PWA deployment may build successfully while cross-repository publishing fails; verify the GitHub Actions publish step separately.
-- The local PWA build succeeds. The build reports the known `dart:html` WebAssembly incompatibility in Set Sheet and Flutter clean may warn about locked ephemeral directories; neither prevented the release build.
-- The GitHub deployment notes report that stale build artifacts were addressed by ignoring `/build/` and `web/flutter_service_worker.js`; confirm those `.gitignore` changes are present in the local checkout.
+- The local PWA release build succeeds. The build reports the known `dart:html` WebAssembly incompatibility in Set Sheet; use `--no-wasm-dry-run` for the standard JavaScript build.
+- Generated web output is ignored in both `/build/` and the source `web/` artifact paths; do not restore generated files into `web/`.
 - Events, Dance Builder, and Admin still need targeted mobile layouts; they should adapt their controls and cards rather than relying only on global scaling.
 - The booking-scoped assignment migration must be applied before the new Dance Builder can save or load primary assignments.
 - The booking formation settings migration must be applied before MAF/MAB and 8/12 choices can persist.
@@ -150,6 +155,7 @@ For PWA deployment:
 14. Complete responsive layouts for Events, Dance Builder, and Admin.
 15. Continue with booking validation and Set Sheet.
 16. Retire legacy `booking_set_layouts` after data preservation and owner-level permission checks.
+17. Keep local web validation on the generated `build/web` directory, using `$webPath = (Resolve-Path .\build\web).Path` before starting `dhttpd`.
 
 ## Session update rule
 
