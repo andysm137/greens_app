@@ -312,7 +312,6 @@ class _EventsScreenState extends State<EventsScreen> {
               'rsvp_status': status,
               'updated_at': DateTime.now().toIso8601String(),
             }, onConflict: 'event_id,member_id');
-            if (mounted) setState(() {});
           },
         );
       }).toList(),
