@@ -436,6 +436,7 @@ class _StableMembersRsvpList extends StatefulWidget {
 class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
   late final Stream<List<Map<String, dynamic>>> _membersStream;
   late final Stream<List<Map<String, dynamic>>> _rsvpStream;
+  final Map<String, String> _optimisticStatuses = {};
 
   @override
   void initState() {
@@ -451,12 +452,29 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
   }
 
   Future<void> _updateRsvp(String memberId, String status) async {
-    await widget.supabase.from('event_rsvps').upsert({
-      'event_id': widget.eventId,
-      'member_id': memberId,
-      'rsvp_status': status,
-      'updated_at': DateTime.now().toIso8601String(),
-    }, onConflict: 'event_id,member_id');
+    final previousStatus = _optimisticStatuses[memberId];
+    setState(() => _optimisticStatuses[memberId] = status);
+
+    try {
+      await widget.supabase.from('event_rsvps').upsert({
+        'event_id': widget.eventId,
+        'member_id': memberId,
+        'rsvp_status': status,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'event_id,member_id');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        if (previousStatus == null) {
+          _optimisticStatuses.remove(memberId);
+        } else {
+          _optimisticStatuses[memberId] = previousStatus;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to update attendance: $error')),
+      );
+    }
   }
 
   @override
@@ -493,7 +511,10 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
                 itemBuilder: (context, index) {
                   final member = members[index];
                   final memberId = member['id'].toString();
-                  final status = rsvpMap[memberId] ?? 'No Response';
+                    final status =
+                      _optimisticStatuses[memberId] ??
+                      rsvpMap[memberId] ??
+                      'No Response';
                   return ListTile(
                     dense: true,
                     title: Text(
