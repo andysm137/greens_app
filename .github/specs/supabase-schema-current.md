@@ -4,6 +4,13 @@ Captured from the live Supabase project on 2026-09-11.
 
 This is a current-state reference, not yet a migration. The column snapshot is based on the live `information_schema.columns` output supplied during this session. The policy snapshot is based on the live `pg_policies` output supplied during this session.
 
+## Applied after snapshot
+
+- `20260913_harden_role_access.sql` replaced the permissive public access policies with role-based RLS.
+- `20260913_event_response_deadlines.sql` added `events.response_deadline` (`date`) and `event_rsvps.comment` (`text`) and applies RSVP date, status, and deadline restrictions.
+- `20260913_delete_booking_with_artifacts.sql` added `delete_event_with_artifacts(UUID)`, an Admin-only transactional RPC that removes an event and its known related RSVP, assignment, settings, and legacy-layout records.
+- Re-export `information_schema.columns` and `pg_policies` after these migrations to refresh this snapshot and [supabase-policy-current.md](supabase-policy-current.md).
+
 ## Current schema facts
 
 - Tables: `audit_logs`, `booking_set_layouts`, `competencies`, `dance_assignments`, `dance_catalog`, `event_rsvps`, `events`, `musician_profiles`, and `team_members`.

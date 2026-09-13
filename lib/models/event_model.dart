@@ -7,6 +7,7 @@ class EventModel {
   final DateTime eventDate;
   final String? location;
   final String? description;
+  final DateTime? responseDeadline;
   final String status; // 'Pending', 'Go', or 'No-go'
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -18,6 +19,7 @@ class EventModel {
     required this.eventDate,
     this.location,
     this.description,
+    this.responseDeadline,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -31,6 +33,9 @@ class EventModel {
       eventDate: DateTime.parse(map['event_date'] as String),
       location: map['location'] as String?,
       description: map['description'] as String?,
+      responseDeadline: map['response_deadline'] == null
+          ? null
+          : DateTime.parse(map['response_deadline'] as String),
       status: map['status'] as String? ?? 'Pending',
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
@@ -45,6 +50,7 @@ class EventModel {
       'event_date': eventDate.toIso8601String(),
       'location': location,
       'description': description,
+      'response_deadline': responseDeadline?.toIso8601String(),
       'status': status,
       'updated_at': DateTime.now().toIso8601String(),
     };
@@ -56,6 +62,7 @@ class EventRsvp {
   final String eventId;
   final String memberId;
   final String rsvpStatus; // 'Attending', 'Not Attending', 'Maybe'
+  final String? comment;
   final DateTime updatedAt;
 
   EventRsvp({
@@ -63,6 +70,7 @@ class EventRsvp {
     required this.eventId,
     required this.memberId,
     required this.rsvpStatus,
+    this.comment,
     required this.updatedAt,
   });
 
@@ -72,6 +80,7 @@ class EventRsvp {
       eventId: map['event_id'] as String,
       memberId: map['member_id'] as String,
       rsvpStatus: map['rsvp_status'] as String,
+      comment: map['comment'] as String?,
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );
   }
@@ -82,6 +91,7 @@ class EventRsvp {
       'event_id': eventId,
       'member_id': memberId,
       'rsvp_status': rsvpStatus,
+      'comment': comment,
       'updated_at': updatedAt.toIso8601String(),
     };
   }

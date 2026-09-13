@@ -7,11 +7,13 @@ import '../models/event_model.dart';
 
 class EventsScreen extends StatefulWidget {
   final bool isLeaderOrAdmin;
+  final bool isAdmin;
   final String currentMemberId;
 
   const EventsScreen({
     super.key,
     required this.isLeaderOrAdmin,
+    required this.isAdmin,
     required this.currentMemberId,
   });
 
@@ -150,16 +152,18 @@ class _EventsScreenState extends State<EventsScreen> {
       statusColor: statusColor,
       event: event,
       isLeaderOrAdmin: widget.isLeaderOrAdmin,
+      isAdmin: widget.isAdmin,
       onStatusChanged: (status) => _updateEventStatus(event.id, status),
-      rsvpSectionBuilder: () => _buildRsvpSection(event.id),
-      membersRsvpListBuilder: () => _buildMembersRsvpList(event.id),
+      onDeleteEvent: () => _deleteEvent(event),
+      rsvpSectionBuilder: () => _buildRsvpSection(event),
+      membersRsvpListBuilder: () => _buildMembersRsvpList(event),
     );
   }
 
-  Widget _buildRsvpSection(String eventId) {
+  Widget _buildRsvpSection(EventModel event) {
     return FutureBuilder<List<dynamic>>(
       future: Future.wait([
-        _supabase.from('event_rsvps').select().eq('event_id', eventId),
+        _supabase.from('event_rsvps').select().eq('event_id', event.id),
         _supabase.from('musician_profiles').select('member_id'),
       ]),
       builder: (context, snapshot) {
@@ -214,14 +218,9 @@ class _EventsScreenState extends State<EventsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _rsvpButton(eventId, 'Attending', Colors.green, currentRsvp),
-                  _rsvpButton(eventId, 'Maybe', Colors.orange, currentRsvp),
-                  _rsvpButton(
-                    eventId,
-                    'Not Attending',
-                    Colors.red,
-                    currentRsvp,
-                  ),
+                  _rsvpButton(event, 'Attending', Colors.green, currentRsvp),
+                  _rsvpButton(event, 'Maybe', Colors.orange, currentRsvp),
+                  _rsvpButton(event, 'Not Attending', Colors.red, currentRsvp),
                 ],
               ),
             ],
@@ -232,7 +231,7 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   Widget _rsvpButton(
-    String eventId,
+    EventModel event,
     String status,
     Color color,
     String currentStatus,
@@ -243,7 +242,9 @@ class _EventsScreenState extends State<EventsScreen> {
         backgroundColor: isSelected ? color : Colors.grey.shade200,
         foregroundColor: isSelected ? Colors.white : Colors.black87,
       ),
-      onPressed: () => _setRsvp(eventId, status),
+      onPressed: _canUpdateOwnRsvp(event)
+          ? () => _setOwnRsvp(event, status)
+          : null,
       child: Text(status),
     );
   }
@@ -251,30 +252,124 @@ class _EventsScreenState extends State<EventsScreen> {
   // Append inside _EventsScreenState in lib/views/events_screen.dart
 
   /// Builds a list of all team members and their current RSVP status for a given event.
-  Widget _buildMembersRsvpList(String eventId) {
+  bool _isPastEvent(EventModel event) {
+    final today = DateTime.now();
+    return _isPastDate(event.eventDate, today);
+  }
+
+  bool _isPastDate(DateTime date, DateTime today) {
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).isBefore(DateTime(today.year, today.month, today.day));
+  }
+
+  bool _canUpdateOwnRsvp(EventModel event) {
+    if (_isPastEvent(event)) return false;
+    if (widget.isLeaderOrAdmin) return true;
+    if (event.status == 'Go') return false;
+    final deadline = event.responseDeadline;
+    return deadline == null || !_isPastDate(deadline, DateTime.now());
+  }
+
+  Widget _buildMembersRsvpList(EventModel event) {
     if (!widget.isLeaderOrAdmin) {
       return const SizedBox.shrink();
     }
     return _StableMembersRsvpList(
-      eventId: eventId,
+      event: event,
       isLeaderOrAdmin: widget.isLeaderOrAdmin,
+      isAdmin: widget.isAdmin,
       supabase: _supabase,
     );
   }
 
-  Future<void> _setRsvp(String eventId, String status) async {
+  Future<void> _setOwnRsvp(EventModel event, String status) async {
+    String? comment;
+    if (status == 'Maybe') {
+      comment = await _showMaybeCommentDialog(context);
+      if (!mounted || comment == null) return;
+    }
     await _supabase.from('event_rsvps').upsert({
-      'event_id': eventId,
+      'event_id': event.id,
       'member_id': widget.currentMemberId,
       'rsvp_status': status,
+      'comment': comment,
       'updated_at': DateTime.now().toIso8601String(),
     }, onConflict: 'event_id,member_id');
     setState(() {});
   }
 
+  Future<String?> _showMaybeCommentDialog(BuildContext context) async {
+    final controller = TextEditingController();
+    final comment = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Maybe response'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(labelText: 'Comment'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return comment;
+  }
+
   Future<void> _updateEventStatus(String eventId, String status) async {
     await _supabase.from('events').update({'status': status}).eq('id', eventId);
     setState(() {});
+  }
+
+  Future<void> _deleteEvent(EventModel event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Event'),
+        content: Text(
+          'Delete ${event.title} and all related RSVP responses, dance positions, and booking settings? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await _supabase.rpc(
+        'delete_event_with_artifacts',
+        params: {'p_event_id': event.id},
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to delete event: $error')),
+        );
+      }
+    }
   }
 
   void _showCreateEventDialog(BuildContext context) {
@@ -283,6 +378,7 @@ class _EventsScreenState extends State<EventsScreen> {
     final descriptionController = TextEditingController();
     String type = 'Practice';
     DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
+    DateTime? responseDeadline;
 
     showDialog(
       context: context,
@@ -340,6 +436,27 @@ class _EventsScreenState extends State<EventsScreen> {
                   },
                 ),
               ),
+              StatefulBuilder(
+                builder: (context, setDialogState) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    responseDeadline == null
+                        ? 'Response deadline: None'
+                        : 'Response deadline: ${responseDeadline!.day}/${responseDeadline!.month}/${responseDeadline!.year}',
+                  ),
+                  trailing: const Icon(Icons.event_available),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: responseDeadline ?? selectedDate,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 3650)),
+                    );
+                    if (picked != null)
+                      setDialogState(() => responseDeadline = picked);
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -358,6 +475,7 @@ class _EventsScreenState extends State<EventsScreen> {
                   eventDate: selectedDate,
                   location: locationController.text,
                   description: descriptionController.text,
+                  responseDeadline: responseDeadline,
                   status: 'Pending',
                   createdAt: DateTime.now(),
                   updatedAt: DateTime.now(),
@@ -368,6 +486,8 @@ class _EventsScreenState extends State<EventsScreen> {
                   'event_date': newEvent.eventDate.toIso8601String(),
                   'location': newEvent.location,
                   'description': newEvent.description,
+                  'response_deadline': newEvent.responseDeadline
+                      ?.toIso8601String(),
                   'status': newEvent.status,
                 });
                 Navigator.pop(context);
@@ -386,7 +506,9 @@ class _EventStatusCard extends StatefulWidget {
   final Color statusColor;
   final EventModel event;
   final bool isLeaderOrAdmin;
+  final bool isAdmin;
   final ValueChanged<String> onStatusChanged;
+  final VoidCallback onDeleteEvent;
   final Widget Function() rsvpSectionBuilder;
   final Widget Function() membersRsvpListBuilder;
 
@@ -395,7 +517,9 @@ class _EventStatusCard extends StatefulWidget {
     required this.statusColor,
     required this.event,
     required this.isLeaderOrAdmin,
+    required this.isAdmin,
     required this.onStatusChanged,
+    required this.onDeleteEvent,
     required this.rsvpSectionBuilder,
     required this.membersRsvpListBuilder,
   });
@@ -440,6 +564,10 @@ class _EventStatusCardState extends State<_EventStatusCard> {
                           Text(
                             '${event.eventDate.day}/${event.eventDate.month}/${event.eventDate.year}',
                           ),
+                          if (event.responseDeadline != null)
+                            Text(
+                              'Response deadline: ${event.responseDeadline!.day}/${event.responseDeadline!.month}/${event.responseDeadline!.year}',
+                            ),
                         ],
                       ),
                     ),
@@ -528,6 +656,21 @@ class _EventStatusCardState extends State<_EventStatusCard> {
                       ],
                     ),
                   ),
+                if (widget.isAdmin)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Delete Event'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red.shade700,
+                        ),
+                        onPressed: widget.onDeleteEvent,
+                      ),
+                    ),
+                  ),
               ],
             ),
         ],
@@ -573,6 +716,7 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
   late final TextEditingController _locationController;
   late final TextEditingController _descriptionController;
   late DateTime _selectedDate;
+  DateTime? _responseDeadline;
   bool _isEditing = false;
   bool _isSaving = false;
 
@@ -587,6 +731,7 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
       text: widget.event.description ?? '',
     );
     _selectedDate = widget.event.eventDate;
+    _responseDeadline = widget.event.responseDeadline;
   }
 
   @override
@@ -607,6 +752,16 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
+  Future<void> _pickResponseDeadline() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _responseDeadline ?? _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _responseDeadline = picked);
+  }
+
   Future<void> _save() async {
     setState(() => _isSaving = true);
     try {
@@ -625,6 +780,7 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
             'description': _descriptionController.text.trim().isEmpty
                 ? null
                 : _descriptionController.text.trim(),
+            'response_deadline': _responseDeadline?.toIso8601String(),
           })
           .eq('id', widget.event.id);
       widget.onSaved();
@@ -661,6 +817,16 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
                     trailing: const Icon(Icons.calendar_today),
                     onTap: _pickDate,
                   ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      _responseDeadline == null
+                          ? 'Response deadline: None'
+                          : 'Response deadline: ${_responseDeadline!.day}/${_responseDeadline!.month}/${_responseDeadline!.year}',
+                    ),
+                    trailing: const Icon(Icons.event_available),
+                    onTap: _pickResponseDeadline,
+                  ),
                   TextField(
                     controller: _locationController,
                     decoration: const InputDecoration(labelText: 'Location'),
@@ -679,6 +845,12 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
                   Text(
                     'Date: ${widget.event.eventDate.day}/${widget.event.eventDate.month}/${widget.event.eventDate.year}',
                   ),
+                  if (widget.event.responseDeadline != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Response deadline: ${widget.event.responseDeadline!.day}/${widget.event.responseDeadline!.month}/${widget.event.responseDeadline!.year}',
+                    ),
+                  ],
                   if (widget.event.location?.isNotEmpty == true) ...[
                     const SizedBox(height: 8),
                     Text('Location: ${widget.event.location}'),
@@ -723,13 +895,15 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
 }
 
 class _StableMembersRsvpList extends StatefulWidget {
-  final String eventId;
+  final EventModel event;
   final bool isLeaderOrAdmin;
+  final bool isAdmin;
   final SupabaseClient supabase;
 
   const _StableMembersRsvpList({
-    required this.eventId,
+    required this.event,
     required this.isLeaderOrAdmin,
+    required this.isAdmin,
     required this.supabase,
   });
 
@@ -756,7 +930,7 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
     _rsvpStream = widget.supabase
         .from('event_rsvps')
         .stream(primaryKey: ['id'])
-        .eq('event_id', widget.eventId);
+        .eq('event_id', widget.event.id);
   }
 
   Future<void> _updateRsvp(String memberId, String status) async {
@@ -765,7 +939,7 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
 
     try {
       await widget.supabase.from('event_rsvps').upsert({
-        'event_id': widget.eventId,
+        'event_id': widget.event.id,
         'member_id': memberId,
         'rsvp_status': status,
         'updated_at': DateTime.now().toIso8601String(),
@@ -804,10 +978,9 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
             return StreamBuilder<List<Map<String, dynamic>>>(
               stream: _rsvpStream,
               builder: (context, rsvpSnapshot) {
-                final rsvpMap = <String, String>{};
+                final rsvpMap = <String, Map<String, dynamic>>{};
                 for (final rsvp in rsvpSnapshot.data ?? const []) {
-                  rsvpMap[rsvp['member_id'].toString()] = rsvp['rsvp_status']
-                      .toString();
+                  rsvpMap[rsvp['member_id'].toString()] = rsvp;
                 }
 
                 final members = membersSnapshot.data!;
@@ -872,15 +1045,18 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
                       final memberId = member['id'].toString();
                       final status =
                           _optimisticStatuses[memberId] ??
-                          rsvpMap[memberId] ??
+                          rsvpMap[memberId]?['rsvp_status']?.toString() ??
                           'No Response';
+                      final comment = rsvpMap[memberId]?['comment']?.toString();
                       return ListTile(
                         dense: true,
                         title: Text(
                           member['full_name'] ?? 'Unknown Member',
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        subtitle: widget.isLeaderOrAdmin
+                        subtitle: comment?.isNotEmpty == true
+                            ? Text(comment!)
+                            : widget.isLeaderOrAdmin
                             ? const Text(
                                 'Tap a status to override response',
                                 style: TextStyle(fontSize: 10),
@@ -961,8 +1137,18 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
       selected: selected,
       selectedColor: color,
       visualDensity: VisualDensity.compact,
-      onSelected: (_) => _updateRsvp(memberId, status),
+      onSelected: _canUpdateRsvp ? (_) => _updateRsvp(memberId, status) : null,
     );
+  }
+
+  bool get _canUpdateRsvp {
+    if (widget.isAdmin) return true;
+    final today = DateTime.now();
+    return !DateTime(
+      widget.event.eventDate.year,
+      widget.event.eventDate.month,
+      widget.event.eventDate.day,
+    ).isBefore(DateTime(today.year, today.month, today.day));
   }
 
   Widget _statusBadge(String status) {

@@ -22,12 +22,15 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
 
-  final List<String> _workspaceTitles = [
+  bool get _isLeaderOrAdmin =>
+      widget.currentMember.isLeader || widget.currentMember.isAdmin;
+
+  List<String> get _workspaceTitles => [
     'Bookings',
     'Skill Matrix',
-    'Dance Builder',
-    'Set Sheet',
-    'Admin',
+    if (_isLeaderOrAdmin) 'Dance Builder',
+    if (_isLeaderOrAdmin) 'Set Sheet',
+    if (widget.currentMember.isAdmin) 'Admin',
   ];
 
   @override
@@ -97,27 +100,30 @@ class _MainShellState extends State<MainShell> {
   }
 
   List<NavigationRailDestination> _navigationDestinations() {
-    return const [
-      NavigationRailDestination(
+    return [
+      const NavigationRailDestination(
         icon: Icon(Icons.event_note),
         label: Text('Bookings'),
       ),
-      NavigationRailDestination(
+      const NavigationRailDestination(
         icon: Icon(Icons.grid_view),
         label: Text('Skills'),
       ),
-      NavigationRailDestination(
-        icon: Icon(Icons.theater_comedy),
-        label: Text('Builder'),
-      ),
-      NavigationRailDestination(
-        icon: Icon(Icons.description),
-        label: Text('Set Sheet'),
-      ),
-      NavigationRailDestination(
-        icon: Icon(Icons.admin_panel_settings),
-        label: Text('Admin'),
-      ),
+      if (_isLeaderOrAdmin)
+        const NavigationRailDestination(
+          icon: Icon(Icons.theater_comedy),
+          label: Text('Builder'),
+        ),
+      if (_isLeaderOrAdmin)
+        const NavigationRailDestination(
+          icon: Icon(Icons.description),
+          label: Text('Set Sheet'),
+        ),
+      if (widget.currentMember.isAdmin)
+        const NavigationRailDestination(
+          icon: Icon(Icons.admin_panel_settings),
+          label: Text('Admin'),
+        ),
     ];
   }
 
@@ -130,25 +136,20 @@ class _MainShellState extends State<MainShell> {
     switch (_selectedIndex) {
       case 0:
         return EventsScreen(
-          isLeaderOrAdmin:
-              widget.currentMember.isLeader || widget.currentMember.isAdmin,
+          isLeaderOrAdmin: _isLeaderOrAdmin,
+          isAdmin: widget.currentMember.isAdmin,
           currentMemberId: widget.currentMember.id,
         );
       case 1:
-        return SkillsMatrixView(
-          currentMember: widget.currentMember,
-        );
+        return SkillsMatrixView(currentMember: widget.currentMember);
       case 2:
-        return DanceBuilderView(
-          currentMemberId: widget.currentMember.id,
-        );
-      //return const StageBuilderView(
-      //  danceName: 'Sallys Dance',
-      //  standardPositions: 8,
-      //  initialMaf: true,
-      //);
+        return _isLeaderOrAdmin
+            ? DanceBuilderView(currentMemberId: widget.currentMember.id)
+            : const Center(child: Text('Leader or admin access required.'));
       case 3:
-        return const SetSheetView();
+        return _isLeaderOrAdmin
+            ? const SetSheetView()
+            : const Center(child: Text('Leader or admin access required.'));
       case 4:
         return widget.currentMember.isAdmin
             ? const AdminView()

@@ -58,9 +58,12 @@ Primary roles:
 - Verified clean release build output under `build/web`.
 - Grouped leader/admin event RSVP rosters into alphabetized Musicians and Dancers for every event type.
 - Updated Dance Builder event selection to show date-sorted event labels, hide past events by default, and provide the same past-event toggle as Events & Practices.
-- Ordered Dance Builder candidates with the primary dancer first and bold, then `YP` before `Y`, with ascending same-rating position coverage and full-name tie breaks; candidate names use the Skills Matrix rating colors.
+- Ordered Dance Builder candidates with the primary dancer first and bold, then `Y` before `YP`, with ascending same-rating position coverage and full-name tie breaks; candidate names use the Skills Matrix rating colors.
 - Made paired Dance Builder position cards match the height of the tallest wrapped candidate list in their row.
 - Updated Set Sheet position lists to mirror Dance Builder candidate eligibility, order, primary emphasis, and `YP`/`Y` name colors; paired rows now share the tallest wrapped row height.
+- Applied `20260913_harden_role_access.sql`, removing permissive public policies and enforcing member, leader, and admin access boundaries.
+- Applied `20260913_event_response_deadlines.sql`, adding event response deadlines, optional Maybe comments, and database-enforced RSVP cutoffs.
+- Applied `20260913_delete_booking_with_artifacts.sql`, providing Admin-only transactional event deletion with RSVP, lineup, settings, and legacy-layout cleanup.
 
 ## Product TODOs
 
@@ -83,11 +86,13 @@ Set Sheet:
 Bookings:
 
 - [ ] Fix flickering on the booking page when updating attendance for team members.
+- [ ] Test Member, Leader, and Admin RSVP behavior for historic, `Go`, and post-deadline events.
+- [ ] Verify only Admins can delete any event and its related records.
 
 Security and data integrity:
 
 - [ ] Rotate the exposed Supabase service-role key, reset the affected account password, and remove the temporary password-reset script.
-- [ ] Remove unrestricted public `ALL` policies from sensitive Supabase tables and replace them with least-privilege authenticated RLS policies.
+- [ ] Re-export the live `pg_policies` output and test member, leader, and admin workflows after the applied RLS hardening.
 - [ ] Audit every direct write in `team_repository.dart` so role restrictions are enforced by RLS, not only by hidden UI screens.
 - [ ] Restrict privileged Edge Function CORS responses to approved application origins.
 - [ ] Make invitation and member-deletion workflows transactional or add reliable reconciliation for partial failures.
@@ -127,6 +132,9 @@ Supabase:
 - `supabase/migrations/20260912_booking_assignments.sql`: booking-scoped primary assignment table and RLS.
 - `supabase/migrations/20260912_booking_dance_settings.sql`: persistent booking/dance formation settings and RLS.
 - `supabase/migrations/20260912_unique_primary_dancers.sql`: database uniqueness constraint for one primary dancer per booking/dance.
+- `supabase/migrations/20260913_harden_role_access.sql`: applied role-based RLS cleanup for member, leader, and admin access.
+- `supabase/migrations/20260913_event_response_deadlines.sql`: applied deadline/comment columns and RSVP cutoff policy.
+- `supabase/migrations/20260913_delete_booking_with_artifacts.sql`: applied Admin-only transactional event deletion RPC.
 
 PWA deployment:
 
@@ -161,6 +169,18 @@ Before testing invitation tracking:
 3. Ensure the current admin profile has `is_admin = true` and is linked through either `team_members.id` or `team_members.auth_user_id`.
 4. Configure Supabase Auth email and redirect URLs.
 
+After applying role-based RLS:
+
+1. Re-export `pg_policies` to `supabase-policy-current.md` and test member, leader, and admin workflows against the live project.
+
+After applying response deadlines and Maybe comments:
+
+1. Verify that Members and Leaders cannot alter historic RSVPs, Members cannot alter `Go` events or responses after deadline, and Admin overrides work as intended.
+
+After applying Admin event deletion:
+
+1. Verify an Admin deletion removes the event, RSVPs, booking assignments, formation settings, and legacy layout records; verify Member and Leader calls are rejected.
+
 For PWA deployment:
 
 1. Verify `PAGES_REPO_TOKEN` in the `greens_app` repository's GitHub Actions secrets.
@@ -171,7 +191,7 @@ For PWA deployment:
 
 ## Known risks and unfinished work
 
-- Live RLS contains unrestricted public policies on several tables. This conflicts with the product security requirements and must be hardened deliberately.
+- Re-export the live RLS policy snapshot to verify `20260913_harden_role_access.sql` applied without unexpected legacy policies remaining.
 - `team_members.instruments` and `musician_profiles` both exist. Choose one authoritative musician model before expanding musician features.
 - Dance Builder identifies musicians from `team_members.instruments`, while Set Sheet's musician summary also consults `musician_profiles`; align these checks when selecting the authoritative model.
 - Auth profile linkage currently supports both legacy `team_members.id` and `auth_user_id`; standardize this later.
@@ -206,7 +226,7 @@ For PWA deployment:
 6. Apply and verify `supabase/migrations/20260912_booking_dance_settings.sql`.
 7. Migrate or retire legacy `dance_assignments` data deliberately.
 8. Capture live constraints, foreign keys, triggers, and functions.
-9. Harden RLS and remove public write policies.
+9. Re-export the RLS policy snapshot and manually test member, leader, and admin boundaries.
 10. Replace the stale widget test and add repository/auth tests.
 11. Refactor the broad repository into feature-specific services.
 12. Decide whether to implement email OTP or magic-link login.
