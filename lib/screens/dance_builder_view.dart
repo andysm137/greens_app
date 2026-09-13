@@ -204,7 +204,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
 
     final leftLevel = _competency(left.id, position)!.proficiencyLevel;
     final rightLevel = _competency(right.id, position)!.proficiencyLevel;
-    if (leftLevel != rightLevel) return leftLevel == 'YP' ? -1 : 1;
+    if (leftLevel != rightLevel) return leftLevel == 'Y' ? -1 : 1;
 
     final countComparison = _competentPositionCount(
       left.id,

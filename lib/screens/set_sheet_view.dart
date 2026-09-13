@@ -285,7 +285,7 @@ class _SetSheetViewState extends State<SetSheetView> {
 
     final leftLevel = left['proficiencyLevel'] as String;
     final rightLevel = right['proficiencyLevel'] as String;
-    if (leftLevel != rightLevel) return leftLevel == 'YP' ? -1 : 1;
+    if (leftLevel != rightLevel) return leftLevel == 'Y' ? -1 : 1;
 
     final countComparison =
         _competentPositionCount(
