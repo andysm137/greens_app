@@ -6,6 +6,7 @@ class EventModel {
   final String eventType; // 'Practice' or 'Booking'
   final DateTime eventDate;
   final String? location;
+  final String? description;
   final String status; // 'Pending', 'Go', or 'No-go'
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -16,6 +17,7 @@ class EventModel {
     required this.eventType,
     required this.eventDate,
     this.location,
+    this.description,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -28,6 +30,7 @@ class EventModel {
       eventType: map['event_type'] as String,
       eventDate: DateTime.parse(map['event_date'] as String),
       location: map['location'] as String?,
+      description: map['description'] as String?,
       status: map['status'] as String? ?? 'Pending',
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
@@ -41,6 +44,7 @@ class EventModel {
       'event_type': eventType,
       'event_date': eventDate.toIso8601String(),
       'location': location,
+      'description': description,
       'status': status,
       'updated_at': DateTime.now().toIso8601String(),
     };

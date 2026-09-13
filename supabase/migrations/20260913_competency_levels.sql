@@ -1,5 +1,5 @@
 -- Competency scale migration:
--- L = Learner, YP = Yes, with a practice, Y = Ok.
+-- - = Not set, L = Learner, YP = Yes, with a practice, Y = Ok.
 -- Run as the database owner after reviewing existing competency data.
 
 DO $$
@@ -25,10 +25,14 @@ END $$;
 
 UPDATE public.competencies SET proficiency_level = 'YP' WHERE proficiency_level = 'Q';
 UPDATE public.competencies SET proficiency_level = 'Y' WHERE proficiency_level = 'M';
+UPDATE public.competencies
+SET proficiency_level = '-'
+WHERE proficiency_level IS NULL
+  OR proficiency_level NOT IN ('-', 'L', 'YP', 'Y');
 
 ALTER TABLE public.competencies
   DROP CONSTRAINT IF EXISTS competencies_proficiency_level_check;
 
 ALTER TABLE public.competencies
   ADD CONSTRAINT competencies_proficiency_level_check
-  CHECK (proficiency_level IN ('L', 'YP', 'Y'));
+  CHECK (proficiency_level IN ('-', 'L', 'YP', 'Y'));

@@ -36,7 +36,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
   TeamMember? _selectedMember;
 
   // Proficiency scale
-  final List<String> _proficiencyLevels = ['None', 'L', 'YP', 'Y'];
+  final List<String> _proficiencyLevels = ['-', 'L', 'YP', 'Y'];
 
   // Special Role Position Markers
   static const int musicianPosition = 0;
@@ -178,7 +178,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
         memberId: memberId,
         danceName: danceName,
         positionNumber: positionNumber,
-        proficiencyLevel: 'None',
+        proficiencyLevel: '-',
       ),
     );
     return match.proficiencyLevel;
@@ -573,9 +573,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
-            level == 'None' ? '-' : level,
+            level == '-' ? '-' : level,
             style: TextStyle(
-              color: level == 'None' ? Colors.black54 : Colors.white,
+              color: level == '-' ? Colors.black54 : Colors.white,
               fontWeight: FontWeight.bold,
             ),
           ),

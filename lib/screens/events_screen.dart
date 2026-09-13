@@ -21,6 +21,7 @@ class EventsScreen extends StatefulWidget {
 
 class _EventsScreenState extends State<EventsScreen> {
   final SupabaseClient _supabase = Supabase.instance.client;
+  bool _hidePastEvents = true;
 
   @override
   Widget build(BuildContext context) {
@@ -70,12 +71,52 @@ class _EventsScreenState extends State<EventsScreen> {
             );
           }
 
-          return ListView.builder(
-            itemCount: events.length,
-            itemBuilder: (context, index) {
-              final event = events[index];
-              return _buildEventCard(event);
-            },
+          final today = DateTime.now();
+          final todayOnly = DateTime(today.year, today.month, today.day);
+          final visibleEvents = _hidePastEvents
+              ? events
+                  .where(
+                    (event) => !DateTime(
+                      event.eventDate.year,
+                      event.eventDate.month,
+                      event.eventDate.day,
+                    ).isBefore(todayOnly),
+                  )
+                  .toList()
+              : events;
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Text('Hide past events'),
+                    Switch(
+                      value: _hidePastEvents,
+                      onChanged: (value) =>
+                          setState(() => _hidePastEvents = value),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: visibleEvents.isEmpty
+                    ? Center(
+                        child: Text(
+                          _hidePastEvents
+                              ? 'No upcoming events or practices.'
+                              : 'No events or practices found.',
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: visibleEvents.length,
+                        itemBuilder: (context, index) =>
+                            _buildEventCard(visibleEvents[index]),
+                      ),
+              ),
+            ],
           );
         },
       ),
@@ -234,6 +275,7 @@ class _EventsScreenState extends State<EventsScreen> {
   void _showCreateEventDialog(BuildContext context) {
     final titleController = TextEditingController();
     final locationController = TextEditingController();
+    final descriptionController = TextEditingController();
     String type = 'Practice';
     DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
 
@@ -261,6 +303,34 @@ class _EventsScreenState extends State<EventsScreen> {
                 controller: locationController,
                 decoration: const InputDecoration(labelText: 'Location'),
               ),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(labelText: 'Details'),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 8),
+              StatefulBuilder(
+                builder: (context, setDialogState) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Date: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                  ),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 3650)),
+                    );
+                    if (picked != null) {
+                      setDialogState(() {
+                        selectedDate = DateTime(picked.year, picked.month, picked.day);
+                      });
+                    }
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -278,6 +348,7 @@ class _EventsScreenState extends State<EventsScreen> {
                   eventType: type,
                   eventDate: selectedDate,
                   location: locationController.text,
+                  description: descriptionController.text,
                   status: 'Pending',
                   createdAt: DateTime.now(),
                   updatedAt: DateTime.now(),
@@ -287,6 +358,7 @@ class _EventsScreenState extends State<EventsScreen> {
                   'event_type': newEvent.eventType,
                   'event_date': newEvent.eventDate.toIso8601String(),
                   'location': newEvent.location,
+                  'description': newEvent.description,
                   'status': newEvent.status,
                 });
                 Navigator.pop(context);
@@ -357,7 +429,7 @@ class _EventStatusCardState extends State<_EventStatusCard> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            '${event.eventType} • ${event.eventDate.day}/${event.eventDate.month}/${event.eventDate.year} ${event.eventDate.hour}:${event.eventDate.minute.toString().padLeft(2, '0')}',
+                            '${event.eventDate.day}/${event.eventDate.month}/${event.eventDate.year}',
                           ),
                         ],
                       ),
@@ -390,20 +462,28 @@ class _EventStatusCardState extends State<_EventStatusCard> {
           if (_isExpanded)
             Column(
               children: [
-                if (event.location != null && event.location!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    child: Row(
-                      children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Row(
+                    children: [
+                      if (event.location != null && event.location!.isNotEmpty) ...[
                         const Icon(Icons.location_on, size: 16, color: Colors.grey),
                         const SizedBox(width: 4),
-                        Text(event.location!),
-                      ],
-                    ),
+                        Expanded(child: Text(event.location!)),
+                      ] else
+                        const Spacer(),
+                      TextButton.icon(
+                        icon: const Icon(Icons.info_outline, size: 18),
+                        label: const Text('Details'),
+                        onPressed: () => _showDetails(
+                          context,
+                          event,
+                          widget.isLeaderOrAdmin,
+                        ),
+                      ),
+                    ],
                   ),
+                ),
                 const Divider(),
                 widget.rsvpSectionBuilder(),
                 widget.membersRsvpListBuilder(),
@@ -435,6 +515,189 @@ class _EventStatusCardState extends State<_EventStatusCard> {
             ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showDetails(
+    BuildContext context,
+    EventModel event,
+    bool canEdit,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _EventDetailsDialog(
+        event: event,
+        canEdit: canEdit,
+        onSaved: () {
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+  }
+}
+
+class _EventDetailsDialog extends StatefulWidget {
+  final EventModel event;
+  final bool canEdit;
+  final VoidCallback onSaved;
+
+  const _EventDetailsDialog({
+    required this.event,
+    required this.canEdit,
+    required this.onSaved,
+  });
+
+  @override
+  State<_EventDetailsDialog> createState() => _EventDetailsDialogState();
+}
+
+class _EventDetailsDialogState extends State<_EventDetailsDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _locationController;
+  late final TextEditingController _descriptionController;
+  late DateTime _selectedDate;
+  bool _isEditing = false;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.event.title);
+    _locationController = TextEditingController(
+      text: widget.event.location ?? '',
+    );
+    _descriptionController = TextEditingController(
+      text: widget.event.description ?? '',
+    );
+    _selectedDate = widget.event.eventDate;
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _locationController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _selectedDate = picked);
+  }
+
+  Future<void> _save() async {
+    setState(() => _isSaving = true);
+    try {
+      await Supabase.instance.client.from('events').update({
+        'title': _titleController.text.trim(),
+        'event_date': DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+        ).toIso8601String(),
+        'location': _locationController.text.trim().isEmpty
+            ? null
+            : _locationController.text.trim(),
+        'description': _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
+      }).eq('id', widget.event.id);
+      widget.onSaved();
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to save event details: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_isEditing ? 'Edit Event Details' : widget.event.title),
+      content: SingleChildScrollView(
+        child: _isEditing
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(labelText: 'Title'),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Date: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                    ),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: _pickDate,
+                  ),
+                  TextField(
+                    controller: _locationController,
+                    decoration: const InputDecoration(labelText: 'Location'),
+                  ),
+                  TextField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(labelText: 'Details'),
+                    maxLines: 4,
+                  ),
+                ],
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Date: ${widget.event.eventDate.day}/${widget.event.eventDate.month}/${widget.event.eventDate.year}',
+                  ),
+                  if (widget.event.location?.isNotEmpty == true) ...[
+                    const SizedBox(height: 8),
+                    Text('Location: ${widget.event.location}'),
+                  ],
+                  if (widget.event.description?.isNotEmpty == true) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Details',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(widget.event.description!),
+                  ],
+                ],
+              ),
+      ),
+      actions: [
+        if (widget.canEdit && !_isEditing)
+          TextButton.icon(
+            icon: const Icon(Icons.edit),
+            label: const Text('Edit'),
+            onPressed: () => setState(() => _isEditing = true),
+          ),
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: Text(_isEditing ? 'Cancel' : 'OK'),
+        ),
+        if (_isEditing)
+          FilledButton(
+            onPressed: _isSaving ? null : _save,
+            child: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Save'),
+          ),
+      ],
     );
   }
 }
