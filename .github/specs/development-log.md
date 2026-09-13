@@ -65,6 +65,10 @@ Set Sheet:
 - [ ] Fix mobile table layout so left-column text wraps or truncates without overflowing into the right column.
 - [ ] Format the printable/PDF Set Sheet for A4 paper, including page margins, repeatable headers, and sensible page breaks.
 
+Bookings:
+
+- [ ] Fix flickering on the booking page when updating attendance for team members.
+
 Security and data integrity:
 
 - [ ] Rotate the exposed Supabase service-role key, reset the affected account password, and remove the temporary password-reset script.
