@@ -23,7 +23,7 @@ class SilkstoneGreensApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Silkstone Greens Pineapple App',
+      title: 'Silkstone Greens App',
       theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: true),
       home: const AuthGate(),
       debugShowCheckedModeBanner: false,
