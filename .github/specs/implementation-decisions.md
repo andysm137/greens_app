@@ -41,6 +41,9 @@ Updated 2026-09-12.
   - `invite-existing-member`
   - `member-auth-statuses`
   - `delete-member`
+- The invitation flow was verified successfully after deploying `invite-existing-member` and applying `20260913_record_member_invitation.sql`.
+- `invite-existing-member` resolves the current Supabase `SUPABASE_SECRET_KEYS` JSON secret, with the deprecated service-role environment variable as fallback.
+- All admin Edge Functions now use the shared secret-key resolver. `invite-member`, `delete-member`, and `member-auth-statuses` use owner-defined RPCs from `20260913_admin_member_operations.sql` for protected profile writes/deletes.
 
 ## Database decisions and open work
 
@@ -51,4 +54,6 @@ Updated 2026-09-12.
 - Live RLS currently includes public unrestricted policies that conflict with the product security requirements. Policy hardening remains outstanding.
 - The live schema and policy snapshots are in `supabase-schema-current.md` and `supabase-policy-current.md`.
 - The migration `supabase/migrations/20260911_member_invitation_tracking.sql` must be applied before invitation tracking works.
+- The migration `supabase/migrations/20260913_record_member_invitation.sql` must be applied before `invite-existing-member` can record `auth_user_id` and `invited_at` without direct table update privileges.
+- The migration `supabase/migrations/20260913_admin_member_operations.sql` must be applied before the legacy invite, delete, and registration-status functions can perform their protected operations.
 - Edge Functions must be deployed after changes before the Flutter workflow can use them.

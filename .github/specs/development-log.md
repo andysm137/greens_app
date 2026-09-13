@@ -42,6 +42,9 @@ Primary roles:
 - Corrected the insufficient-dancers check to require a unique matching dancer across all active positions; one qualified dancer repeated across every position now triggers the warning.
 - Updated Set Sheet to include Practices, show attending dancers above musicians, and grey dance tiles that lack unique attending `L/Q/M` coverage for every active position.
 - Created a fresh local release PWA build with `flutter build web --release --base-href "/SilkstoneGreensApp/"`; output is in `build/web` with `404.html` copied for client-side routing.
+- Updated the invitation Edge Function to resolve Supabase's current `SUPABASE_SECRET_KEYS` JSON default secret, with a legacy `SUPABASE_SERVICE_ROLE_KEY` fallback, after the function received permission-denied errors reading `team_members`.
+- Added `20260913_record_member_invitation.sql` to perform the protected invitation metadata update through an owner-defined `SECURITY DEFINER` RPC when direct Edge Function table UPDATE privileges are unavailable.
+- Verified the admin invitation flow works after applying `20260913_record_member_invitation.sql` and redeploying `invite-existing-member`.
 - Restored the Dance Builder formation graphic as a two-column grid, with centered MAF above and MAB below the numbered positions.
 - Fixed expanded booking RSVP content so member and leader attendance changes refresh immediately.
 - Limited booking status colors to the event header row so expanded RSVP content remains neutral.
@@ -162,6 +165,7 @@ For PWA deployment:
 - A signed-in Change Password action is still to be added to the account/profile UI. It should collect a new password and confirmation, then call `auth.updateUser(UserAttributes(password: ...))` without requiring a reset email.
 - Password reset redirects require Supabase Auth URL configuration for the active local debug URL and the current GitHub Pages URL; previously issued reset emails may still use the old redirect.
 - Edge Function deployment is external to Flutter analysis; local code can compile while deployed functions remain stale.
+- The invitation Edge Function must use the current `SUPABASE_SECRET_KEYS` reserved secret JSON, with legacy `SUPABASE_SERVICE_ROLE_KEY` only as a fallback. Direct `team_members` updates from the function are avoided through `record_member_invitation`.
 - PWA deployment may build successfully while cross-repository publishing fails; verify the GitHub Actions publish step separately.
 - The local PWA release build succeeds. The build reports the known `dart:html` WebAssembly incompatibility in Set Sheet; use `--no-wasm-dry-run` for the standard JavaScript build.
 - Generated web output is ignored in both `/build/` and the source `web/` artifact paths; do not restore generated files into `web/`.

@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveAdminKey } from "../_shared/admin_key.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,12 +19,15 @@ Deno.serve(async (request) => {
 
   const authorization = request.headers.get("Authorization");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!authorization?.startsWith("Bearer ") || !supabaseUrl || !serviceRoleKey) {
+  const adminKey = resolveAdminKey(
+    Deno.env.get("SUPABASE_SECRET_KEYS"),
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  );
+  if (!authorization?.startsWith("Bearer ") || !supabaseUrl || !adminKey) {
     return json({ error: "Invalid function configuration or session" }, 401);
   }
 
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const adminClient = createClient(supabaseUrl, adminKey);
   const accessToken = authorization.replace("Bearer ", "");
   const { data: caller, error: callerError } = await adminClient.auth.getUser(accessToken);
   if (callerError || !caller.user) return json({ error: "Invalid session" }, 401);
@@ -50,10 +54,10 @@ Deno.serve(async (request) => {
     const { data: authUser } = await adminClient.auth.admin.getUserById(member.auth_user_id);
     const registered = Boolean(authUser.user?.email_confirmed_at || authUser.user?.last_sign_in_at);
     if (registered && !member.registered_at) {
-      await adminClient
-        .from("team_members")
-        .update({ registered_at: new Date().toISOString() })
-        .eq("id", member.id);
+      await adminClient.rpc("mark_member_registered", {
+        p_member_id: member.id,
+        p_registered_at: new Date().toISOString(),
+      });
     }
     statuses[member.id] = registered ? "registered" : "inviteSent";
   }

@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveAdminKey } from "../_shared/admin_key.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,12 +28,15 @@ Deno.serve(async (request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceRoleKey) {
+  const adminKey = resolveAdminKey(
+    Deno.env.get("SUPABASE_SECRET_KEYS"),
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  );
+  if (!supabaseUrl || !adminKey) {
     return json({ error: "The function is not configured" }, 500);
   }
 
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const adminClient = createClient(supabaseUrl, adminKey);
   const accessToken = authorization.replace("Bearer ", "");
   const { data: caller, error: callerError } = await adminClient.auth.getUser(
     accessToken,
@@ -65,19 +69,10 @@ Deno.serve(async (request) => {
     return json({ error: "You cannot delete your own account" }, 400);
   }
 
-  const { error: musicianError } = await adminClient
-    .from("musician_profiles")
-    .delete()
-    .eq("member_id", memberId);
-
-  if (musicianError) {
-    return json({ error: musicianError.message }, 400);
-  }
-
-  const { error: memberError } = await adminClient
-    .from("team_members")
-    .delete()
-    .eq("id", memberId);
+  const { error: memberError } = await adminClient.rpc(
+    "delete_member_profile",
+    { p_member_id: memberId },
+  );
 
   if (memberError) {
     return json({ error: memberError.message }, 400);

@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveAdminKey } from "../_shared/admin_key.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,13 +28,16 @@ Deno.serve(async (request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceRoleKey) {
+  const adminKey = resolveAdminKey(
+    Deno.env.get("SUPABASE_SECRET_KEYS"),
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  );
+  if (!supabaseUrl || !adminKey) {
     return json({ error: "The function is not configured" }, 500);
   }
 
   const accessToken = authorization.replace("Bearer ", "");
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const adminClient = createClient(supabaseUrl, adminKey);
   const { data: caller, error: callerError } = await adminClient.auth.getUser(
     accessToken,
   );
@@ -71,39 +75,28 @@ Deno.serve(async (request) => {
     return json({ error: invitationError?.message ?? "Unable to send invitation" }, 400);
   }
 
-  const { error: memberError } = await adminClient.from("team_members").insert({
-    id: invitation.user.id,
-    auth_user_id: invitation.user.id,
-    full_name: fullName,
-    email,
-    phone: phone || null,
-    is_leader: isLeader,
-    is_admin: isAdmin,
-    instruments: instruments || null,
-    invited_at: new Date().toISOString(),
-  });
-
-  if (memberError) {
-    await adminClient.auth.admin.deleteUser(invitation.user.id);
-    return json({ error: memberError.message }, 400);
-  }
-
   const instrumentNames = instruments
     .split(",")
     .map((instrument) => instrument.trim())
     .filter((instrument) => instrument.length > 0);
 
-  if (instrumentNames.length > 0) {
-    const { error: musicianError } = await adminClient
-      .from("musician_profiles")
-      .insert(instrumentNames.map((primaryInstrument) => ({
-        member_id: invitation.user!.id,
-        primary_instrument: primaryInstrument,
-      })));
+  const { error: memberError } = await adminClient.rpc(
+    "create_invited_member",
+    {
+      p_id: invitation.user.id,
+      p_full_name: fullName,
+      p_email: email,
+      p_phone: phone || null,
+      p_is_leader: isLeader,
+      p_is_admin: isAdmin,
+      p_instruments: instrumentNames,
+      p_invited_at: new Date().toISOString(),
+    },
+  );
 
-    if (musicianError) {
-      return json({ error: musicianError.message }, 400);
-    }
+  if (memberError) {
+    await adminClient.auth.admin.deleteUser(invitation.user.id);
+    return json({ error: memberError.message }, 400);
   }
 
   return json({ user_id: invitation.user.id });
