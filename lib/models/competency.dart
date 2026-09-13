@@ -6,7 +6,7 @@ class Competency {
   final String danceName;
   final int?
   positionNumber; // 1-8 or 1-12, null for general musician tune competency
-  final String proficiencyLevel; // 'L', 'Q', or 'M'
+  final String proficiencyLevel; // 'L' Learner, 'YP' Yes with practice, 'Y' Ok
   final DateTime? updatedAt;
 
   Competency({

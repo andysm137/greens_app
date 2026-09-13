@@ -147,7 +147,7 @@ class _SetSheetViewState extends State<SetSheetView> {
               .where((item) =>
                   item['dance_name'] == dance &&
                   item['position_number'] == position &&
-                  ['L', 'Q', 'M'].contains(item['proficiency_level']) &&
+                  ['YP', 'Y'].contains(item['proficiency_level']) &&
                   attendingIds.contains(item['member_id'].toString()))
               .map((item) => item['member_id'].toString());
           final ids = viableIds.toList();

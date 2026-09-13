@@ -135,7 +135,9 @@ class _MainShellState extends State<MainShell> {
           currentMemberId: widget.currentMember.id,
         );
       case 1:
-        return const SkillsMatrixView();
+        return SkillsMatrixView(
+          currentMember: widget.currentMember,
+        );
       case 2:
         return DanceBuilderView(
           currentMemberId: widget.currentMember.id,

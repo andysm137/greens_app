@@ -251,7 +251,7 @@ class _StageBuilderViewState extends State<StageBuilderView> {
                     final competencies = results[1] as List<Competency>;
 
                     // Create a quick lookup map for member competencies
-                    // Key: memberId, Value: proficiencyLevel ('L', 'Q', or 'M')
+                    // Key: memberId, Value: proficiencyLevel ('L', 'YP', or 'Y')
                     final Map<String, String> competencyMap = {
                       for (var c in competencies)
                         c.memberId: c.proficiencyLevel,
@@ -270,7 +270,7 @@ class _StageBuilderViewState extends State<StageBuilderView> {
                         final member = members[index];
                         final proficiency = competencyMap[member.id];
                         final isQualified =
-                            proficiency == 'L' || proficiency == 'Q';
+                          proficiency == 'YP' || proficiency == 'Y';
 
                         return ListTile(
                           leading: Icon(

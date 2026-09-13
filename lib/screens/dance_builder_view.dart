@@ -155,9 +155,8 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
       if (member.isMusician || !_attendingIds.contains(member.id)) return false;
       final competency = _competency(member.id, position);
         return competency != null &&
-            (competency.proficiencyLevel == 'L' ||
-                competency.proficiencyLevel == 'Q' ||
-                competency.proficiencyLevel == 'M');
+            (competency.proficiencyLevel == 'YP' ||
+              competency.proficiencyLevel == 'Y');
     }).toList();
   }
 
@@ -167,9 +166,8 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
       return _competencies.any(
         (item) => item.memberId == member.id &&
             item.positionNumber == 0 &&
-            (item.proficiencyLevel == 'L' ||
-              item.proficiencyLevel == 'Q' ||
-              item.proficiencyLevel == 'M'),
+            (item.proficiencyLevel == 'YP' ||
+              item.proficiencyLevel == 'Y'),
       );
     }).toList();
   }

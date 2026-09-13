@@ -41,6 +41,8 @@ Primary roles:
 - Retained all viable dancer candidates in Set Sheet rows when a primary exists, added duplicate-primary warnings/blocking in Dance Builder, added a dance-level insufficient-dancers banner, and added a database uniqueness migration for one primary dancer per booking/dance.
 - Corrected the insufficient-dancers check to require a unique matching dancer across all active positions; one qualified dancer repeated across every position now triggers the warning.
 - Updated Set Sheet to include Practices, show attending dancers above musicians, and grey dance tiles that lack unique attending `L/Q/M` coverage for every active position.
+- Restricted member Booking access to their own RSVP controls, added leader/admin dancer and musician attendance summaries, and restricted member Skill Matrix access to their own By Dancer view.
+- Changed the competency scale to `L` Learner, `YP` Yes with a practice, and `Y` Ok; Dance Builder and Set Sheet use only `YP/Y` as performer-ready levels.
 - Created a fresh local release PWA build with `flutter build web --release --base-href "/SilkstoneGreensApp/"`; output is in `build/web` with `404.html` copied for client-side routing.
 - Updated the invitation Edge Function to resolve Supabase's current `SUPABASE_SECRET_KEYS` JSON default secret, with a legacy `SUPABASE_SERVICE_ROLE_KEY` fallback, after the function received permission-denied errors reading `team_members`.
 - Added `20260913_record_member_invitation.sql` to perform the protected invitation metadata update through an owner-defined `SECURITY DEFINER` RPC when direct Edge Function table UPDATE privileges are unavailable.
@@ -175,6 +177,7 @@ For PWA deployment:
 - Existing `dance_assignments` rows are legacy/global assignments and have not been automatically migrated into booking-scoped assignments.
 - The booking assignment/settings migrations intentionally omit foreign keys because the current SQL role lacks `REFERENCES` permission on existing tables; referential integrity remains a follow-up database-owner task.
 - `supabase/migrations/20260912_unique_primary_dancers.sql` requires a duplicate check before applying; it enforces one primary member per booking/dance across positions.
+- `supabase/migrations/20260913_competency_levels.sql` maps legacy `Q/M` values to `YP/Y` and replaces the proficiency constraint.
 - Builder candidates require an exact `competencies.dance_name` match for the selected catalog dance and an `event_rsvps.rsvp_status` of `Attending`; mismatched dance names or RSVP values will correctly exclude a member.
 - Set Sheet dance membership is currently inferred from `booking_dance_assignments` and `booking_dance_settings`; a dedicated booking-to-dance planning table may be needed if leaders must schedule dances before any builder/settings record exists.
 - `booking_set_layouts` is now a legacy table candidate for removal. Before dropping it, check/export any rows, remove the unused `BookingLayout` repository/model code, verify no deployed code references it, and confirm an owner-capable SQL role can perform the drop.

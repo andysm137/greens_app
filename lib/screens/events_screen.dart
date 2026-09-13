@@ -113,19 +113,34 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   Widget _buildRsvpSection(String eventId) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _supabase.from('event_rsvps').select().eq('event_id', eventId),
+    return FutureBuilder<List<dynamic>>(
+      future: Future.wait([
+        _supabase.from('event_rsvps').select().eq('event_id', eventId),
+        _supabase.from('musician_profiles').select('member_id'),
+      ]),
       builder: (context, snapshot) {
         String currentRsvp = 'Not Set';
         int attendingCount = 0;
+        int attendingDancers = 0;
+        int attendingMusicians = 0;
 
         if (snapshot.hasData) {
-          for (var item in snapshot.data!) {
+          final rsvps = List<Map<String, dynamic>>.from(snapshot.data![0] as List);
+          final musicianIds = (snapshot.data![1] as List)
+              .map((item) => item['member_id'].toString())
+              .toSet();
+          final attendingIds = <String>{};
+          for (var item in rsvps) {
             if (item['rsvp_status'] == 'Attending') attendingCount++;
+            if (item['rsvp_status'] == 'Attending') {
+              attendingIds.add(item['member_id'].toString());
+            }
             if (item['member_id'] == widget.currentMemberId) {
               currentRsvp = item['rsvp_status'];
             }
           }
+          attendingMusicians = attendingIds.intersection(musicianIds).length;
+          attendingDancers = attendingCount - attendingMusicians;
         }
 
         return Padding(
@@ -136,10 +151,13 @@ class _EventsScreenState extends State<EventsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Attending Count: $attendingCount',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
+                  if (widget.isLeaderOrAdmin)
+                    Text(
+                      'Dancers: $attendingDancers  Musicians: $attendingMusicians',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    )
+                  else
+                    const SizedBox.shrink(),
                   Text(
                     'Your RSVP: $currentRsvp',
                     style: const TextStyle(fontStyle: FontStyle.italic),
@@ -188,6 +206,9 @@ class _EventsScreenState extends State<EventsScreen> {
 
   /// Builds a list of all team members and their current RSVP status for a given event.
   Widget _buildMembersRsvpList(String eventId) {
+    if (!widget.isLeaderOrAdmin) {
+      return const SizedBox.shrink();
+    }
     return _StableMembersRsvpList(
       eventId: eventId,
       isLeaderOrAdmin: widget.isLeaderOrAdmin,

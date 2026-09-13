@@ -7,8 +7,12 @@ import '../services/team_repository.dart';
 enum MatrixMode { byDancer, byDance }
 
 class SkillsMatrixView extends StatefulWidget {
-  const SkillsMatrixView({Key? key})
-    : super(key: const Key('skills_matrix_view'));
+  final TeamMember currentMember;
+
+  const SkillsMatrixView({
+    Key? key,
+    required this.currentMember,
+  }) : super(key: const Key('skills_matrix_view'));
 
   @override
   State<SkillsMatrixView> createState() => _SkillsMatrixViewState();
@@ -32,7 +36,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
   TeamMember? _selectedMember;
 
   // Proficiency scale
-  final List<String> _proficiencyLevels = ['None', 'L', 'Q', 'M'];
+  final List<String> _proficiencyLevels = ['None', 'L', 'YP', 'Y'];
 
   // Special Role Position Markers
   static const int musicianPosition = 0;
@@ -62,7 +66,14 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
             dance['dance_name'] as String: dance['standard_positions'] as int,
         };
 
-        if (_members.isNotEmpty) _selectedMember = _members.first;
+        if (_members.isNotEmpty) {
+          _selectedMember = widget.currentMember.isLeader || widget.currentMember.isAdmin
+              ? _members.first
+              : _members.firstWhere(
+                  (member) => member.id == widget.currentMember.id,
+                  orElse: () => widget.currentMember,
+                );
+        }
         if (_danceList.isNotEmpty) _selectedDance = _danceList.first;
       });
 
@@ -95,7 +106,8 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
 
   /// Fetch competencies based on active matrix view mode
   Future<void> _refreshCompetencies() async {
-    if (_currentMode == MatrixMode.byDance && _selectedDance != null) {
+    final isMember = !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
+    if (!isMember && _currentMode == MatrixMode.byDance && _selectedDance != null) {
       final comps = await _teamRepository.fetchCompetenciesForDance(
         _selectedDance!,
       );
@@ -141,9 +153,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     switch (level) {
       case 'L':
         return Colors.orange.shade300;
-      case 'Q':
+      case 'YP':
         return Colors.green.shade400;
-      case 'M':
+      case 'Y':
         return Colors.purple.shade300;
       default:
         return Colors.grey.shade300;
@@ -188,6 +200,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     }
 
     final isCompact = MediaQuery.sizeOf(context).width < 600;
+    final isMember = !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Skills Matrix')),
@@ -195,9 +208,10 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
         children: [
           const SizedBox(height: 12),
           // Toggle Switch: By Dance vs By Dancer
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: isCompact ? 12 : 0),
-            child: SegmentedButton<MatrixMode>(
+          if (!isMember)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: isCompact ? 12 : 0),
+              child: SegmentedButton<MatrixMode>(
               segments: const [
                 ButtonSegment<MatrixMode>(
                   value: MatrixMode.byDance,
@@ -210,7 +224,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
                   icon: Icon(Icons.person),
                 ),
               ],
-              selected: {_currentMode},
+              selected: {isMember ? MatrixMode.byDancer : _currentMode},
               expandedInsets: isCompact
                   ? EdgeInsets.zero
                   : const EdgeInsets.symmetric(horizontal: 24),
@@ -227,17 +241,17 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
           // Dropdown Filter Selector Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: _currentMode == MatrixMode.byDance
-                ? _buildDanceDropdown()
-                : _buildDancerDropdown(),
+            child: isMember || _currentMode == MatrixMode.byDancer
+              ? _buildDancerDropdown()
+              : _buildDanceDropdown(),
           ),
           const Divider(height: 24),
 
           // Active View Content Table
           Expanded(
-            child: _currentMode == MatrixMode.byDance
-                ? _buildByDanceTable()
-                : _buildByDancerTable(),
+            child: isMember || _currentMode == MatrixMode.byDancer
+              ? _buildByDancerTable()
+              : _buildByDanceTable(),
           ),
         ],
       ),
@@ -293,10 +307,14 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 500;
+        final isMember = !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
+        final selectableMembers = isMember
+          ? [_selectedMember ?? widget.currentMember]
+          : _members;
         final selector = DropdownButton<TeamMember>(
           value: _selectedMember,
           isExpanded: true,
-          items: _members.map((member) {
+          items: selectableMembers.map((member) {
             return DropdownMenuItem(
               value: member,
               child: Text(
