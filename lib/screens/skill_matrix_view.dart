@@ -9,9 +9,15 @@ enum MatrixMode { byDancer, byDance }
 
 class SkillsMatrixView extends StatefulWidget {
   final TeamMember currentMember;
+  final String? initialDancerId;
+  final String? highlightDanceName;
 
-  const SkillsMatrixView({Key? key, required this.currentMember})
-    : super(key: const Key('skills_matrix_view'));
+  const SkillsMatrixView({
+    Key? key,
+    required this.currentMember,
+    this.initialDancerId,
+    this.highlightDanceName,
+  }) : super(key: const Key('skills_matrix_view'));
 
   @override
   State<SkillsMatrixView> createState() => _SkillsMatrixViewState();
@@ -76,6 +82,15 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
                   (member) => member.id == widget.currentMember.id,
                   orElse: () => widget.currentMember,
                 );
+          final deepLinkedDancerId = widget.initialDancerId;
+          if (deepLinkedDancerId != null &&
+              (widget.currentMember.isLeader || widget.currentMember.isAdmin)) {
+            _currentMode = MatrixMode.byDancer;
+            _selectedMember = _members.firstWhere(
+              (member) => member.id == deepLinkedDancerId,
+              orElse: () => _selectedMember!,
+            );
+          }
         }
         if (_danceList.isNotEmpty) _selectedDance = _danceList.first;
       });
@@ -565,8 +580,12 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
             final dancePositionCount = _positionCountForDance(dance);
             final hasMaf = _danceHasRole(dance, 'MAF');
             final hasMab = _danceHasRole(dance, 'MAB');
+            final isHighlighted = dance == widget.highlightDanceName;
 
             return DataRow(
+              color: isHighlighted
+                  ? WidgetStateProperty.all(Colors.amber.shade100)
+                  : null,
               cells: [
                 DataCell(
                   Text(

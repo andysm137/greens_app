@@ -179,6 +179,8 @@ Deno.serve(async (request) => {
         p_title: message.title,
         p_body: notificationBody,
         p_event_id: eventId || null,
+        p_related_member_id: notificationType === "competency_updated" ? (memberId || null) : null,
+        p_dance_name: notificationType === "competency_updated" ? (danceName || null) : null,
       },
     );
     if (inboxError) return json({ error: inboxError.message }, 400);

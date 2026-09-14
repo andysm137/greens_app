@@ -89,6 +89,8 @@ Primary roles:
 - Fixed the Events tab "sticky" auto-expand: `main_shell.dart` now clears `_pendingEventId` via `addPostFrameCallback` immediately after passing it to `EventsScreen` once, so returning to the tab later never re-expands a past notification's event.
 - Moved the Go/No-go/Pending status control into the colored header chip (`_buildStatusChip` in `_EventStatusCardState`), replacing the separate "Booking Status:" dropdown row; same options, callback, and Leader/Admin-only access.
 - Added Member RSVP guard rails in `events_screen.dart`: No-go locks RSVP changes entirely; Go/past-deadline still allow moving to Attending but block moving away from it with a "discuss with a Leader" popup; changing from Attending to Not Attending now always prompts for a reason (mirroring the existing Maybe comment prompt). Leaders/Admins are unaffected. Notification dispatch on RSVP change is unchanged.
+- Added `related_member_id`/`dance_name` columns to `notifications` and extended `insert_notification_for_delivery` (`20260914_notification_competency_context.sql`) so `competency_updated` deliveries carry deep-link context; `send-push-notification` now passes them through and has been redeployed.
+- Tapping a `competency_updated` notification now switches to the Skill Matrix tab in By Dancer mode for the affected member and highlights the changed dance row (`SkillsMatrixView.initialDancerId`/`highlightDanceName`, wired through `main_shell.dart`'s pending-navigation pattern).
 
 ## Product TODOs
 

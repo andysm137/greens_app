@@ -24,6 +24,8 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
   String? _pendingEventId;
+  String? _pendingDancerId;
+  String? _pendingDanceName;
   final NotificationSubscriptionService _notificationSubscriptionService =
       NotificationSubscriptionService();
   final NotificationsRepository _notificationsRepository =
@@ -218,10 +220,26 @@ class _MainShellState extends State<MainShell> {
                                 );
                               }
                               if (context.mounted) {
-                                Navigator.pop(
-                                  context,
-                                  'event:${notification['event_id'] ?? ''}',
-                                );
+                                if (notification['notification_type'] ==
+                                    'competency_updated') {
+                                  final dancerId =
+                                      notification['related_member_id']
+                                          ?.toString() ??
+                                      '';
+                                  final danceName =
+                                      notification['dance_name']
+                                          ?.toString() ??
+                                      '';
+                                  Navigator.pop(
+                                    context,
+                                    'competency:$dancerId:${Uri.encodeComponent(danceName)}',
+                                  );
+                                } else {
+                                  Navigator.pop(
+                                    context,
+                                    'event:${notification['event_id'] ?? ''}',
+                                  );
+                                }
                               }
                             },
                           );
@@ -271,6 +289,20 @@ class _MainShellState extends State<MainShell> {
         setState(() {
           _pendingEventId = eventId;
           _selectedIndex = 0;
+        });
+      }
+    }
+    if (action?.startsWith('competency:') == true) {
+      final parts = action!.substring('competency:'.length).split(':');
+      final dancerId = parts.isNotEmpty ? parts[0] : '';
+      final danceName = parts.length > 1
+          ? Uri.decodeComponent(parts[1])
+          : '';
+      if (dancerId.isNotEmpty) {
+        setState(() {
+          _pendingDancerId = dancerId;
+          _pendingDanceName = danceName.isNotEmpty ? danceName : null;
+          _selectedIndex = 1;
         });
       }
     }
@@ -371,7 +403,24 @@ class _MainShellState extends State<MainShell> {
           initialEventId: eventId,
         );
       case 1:
-        return SkillsMatrixView(currentMember: widget.currentMember);
+        final dancerId = _pendingDancerId;
+        final danceName = _pendingDanceName;
+        if (dancerId != null) {
+          // Consume the pending navigation once, same pattern as the events tab.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _pendingDancerId = null;
+                _pendingDanceName = null;
+              });
+            }
+          });
+        }
+        return SkillsMatrixView(
+          currentMember: widget.currentMember,
+          initialDancerId: dancerId,
+          highlightDanceName: danceName,
+        );
       case 2:
         return _isLeaderOrAdmin
             ? DanceBuilderView(currentMemberId: widget.currentMember.id)
