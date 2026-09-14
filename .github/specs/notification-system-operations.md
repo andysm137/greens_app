@@ -26,8 +26,11 @@ Apply these in the Supabase SQL Editor as the database owner, in this order:
 4. `20260914_deadline_reminders.sql`
 5. `20260914_unregister_push_subscription.sql`
 6. `20260914_notifications_inbox.sql`
+7. `20260914_notification_delivery_settings.sql`
 
 All listed notification migrations have now been applied and the test push path has been verified.
+
+The delivery-settings migration is applied; deployed senders read Admin notification settings through the server-only RPC.
 
 Check the notification tables after applying the migrations:
 

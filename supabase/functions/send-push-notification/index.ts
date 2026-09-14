@@ -79,13 +79,31 @@ Deno.serve(async (request) => {
     if (!event) return json({ error: "Event not found" }, 404);
   }
 
-  const { data: setting } = await client
-    .from("notification_settings")
-    .select("is_enabled, message_template")
-    .eq("notification_type", notificationType)
-    .maybeSingle();
+  const { data: settings, error: settingError } = await client.rpc(
+    "get_notification_setting_for_delivery",
+    { p_notification_type: notificationType },
+  );
+  if (settingError) {
+    return json({
+      error: "Unable to read notification setting",
+      notification_type: notificationType,
+      details: settingError.message,
+    }, 500);
+  }
+  const setting = settings?.[0];
+  if (!setting) {
+    return json({
+      error: "Notification setting not found",
+      notification_type: notificationType,
+    }, 500);
+  }
   if (notificationType !== "test" && setting?.is_enabled !== true) {
-    return json({ delivered: 0, disabled: true });
+    return json({
+      delivered: 0,
+      disabled: true,
+      notification_type: notificationType,
+      is_enabled: setting.is_enabled,
+    });
   }
 
   const message = standardMessages[notificationType];

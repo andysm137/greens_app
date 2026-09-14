@@ -29,11 +29,11 @@ Deno.serve(async (request) => {
   }
 
   const client = createClient(supabaseUrl, serviceKey);
-  const { data: setting } = await client
-    .from("notification_settings")
-    .select("is_enabled, reminder_days, message_template")
-    .eq("notification_type", "deadline_reminder")
-    .maybeSingle();
+  const { data: settings } = await client.rpc(
+    "get_notification_setting_for_delivery",
+    { p_notification_type: "deadline_reminder" },
+  );
+  const setting = settings?.[0];
   if (setting?.is_enabled !== true) return json({ sent: 0, disabled: true });
 
   const reminderDays = (setting.reminder_days as number[] | null) ?? [];

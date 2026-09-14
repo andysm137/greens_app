@@ -74,6 +74,7 @@ Primary roles:
 - Wired immediate event notifications for event creation, status changes, event detail changes, and RSVP changes; the deployed sender selects recipients and applies Admin notification settings/templates server-side.
 - Added and deployed `send-deadline-reminders`, which uses Admin-configured reminder days, skips responded members, and prevents duplicate sends with `notification_deliveries`.
 - Applied `20260914_notifications_inbox.sql`, adding a lightweight unread/read notification inbox; the single bell now shows a badge/list with individual and mark-all read actions, and immediate/deadline sender functions persist inbox records.
+- Applied `20260914_notification_delivery_settings.sql` and redeployed both notification senders to read Admin settings through a server-only RPC.
 
 ## Product TODOs
 
