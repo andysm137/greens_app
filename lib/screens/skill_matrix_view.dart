@@ -41,12 +41,11 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
   String? _selectedDance;
   TeamMember? _selectedMember;
   String? _highlightedDanceName;
-  late final AnimationController _highlightFadeController = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 15),
-  )..addListener(() {
-      if (mounted) setState(() {});
-    });
+  late final AnimationController _highlightFadeController =
+      AnimationController(vsync: this, duration: const Duration(seconds: 15))
+        ..addListener(() {
+          if (mounted) setState(() {});
+        });
 
   // Proficiency scale
   final List<String> _proficiencyLevels = ['-', 'L', 'YP', 'Y'];
@@ -63,7 +62,8 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
       _currentMode = MatrixMode.byDancer;
     }
     _highlightedDanceName = widget.highlightDanceName;
-    if (_highlightedDanceName != null) _highlightFadeController.forward(from: 0);
+    if (_highlightedDanceName != null)
+      _highlightFadeController.forward(from: 0);
     // Captured now, synchronously: the parent may clear widget.initialDancerId
     // a frame later, before the awaits below finish.
     _loadInitialData(widget.initialDancerId);
@@ -511,7 +511,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          columnSpacing: 16.0,
+          columnSpacing: 12.0,
+          dataRowMinHeight: 48,
+          dataRowMaxHeight: 48,
           columns: [
             const DataColumn(
               label: Text(
@@ -625,7 +627,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          columnSpacing: 16.0,
+          columnSpacing: 12.0,
+          dataRowMinHeight: 48,
+          dataRowMaxHeight: 48,
           columns: [
             const DataColumn(
               label: Text(
@@ -730,18 +734,25 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
           currentLevel: level,
         ),
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: _getBadgeColor(level),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            level == '-' ? '-' : level,
-            style: TextStyle(
-              color: level == '-' ? Colors.black54 : Colors.white,
-              fontWeight: FontWeight.bold,
+        child: SizedBox(
+          height: 48,
+          child: Center(
+            child: Container(
+              height: 40,
+              width: 40,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              decoration: BoxDecoration(
+                color: _getBadgeColor(level),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                level == '-' ? '-' : level,
+                style: TextStyle(
+                  color: level == '-' ? Colors.black54 : Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ),

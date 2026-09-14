@@ -119,10 +119,13 @@ class _SetSheetViewState extends State<SetSheetView> {
           .map((profile) => profile['member_id'].toString())
           .toSet();
 
-      final danceNames = <String>{
-        ...assignments.map((item) => item['dance_name'].toString()),
-        ...settings.map((item) => item['dance_name'].toString()),
-      }.toList()..sort();
+      final danceNames =
+          <String>{
+            ...assignments.map((item) => item['dance_name'].toString()),
+            ...settings.map((item) => item['dance_name'].toString()),
+          }.toList()..sort(
+            (left, right) => left.toLowerCase().compareTo(right.toLowerCase()),
+          );
 
       final byDance = <String, Map<String, dynamic>>{};
       for (final dance in danceNames) {

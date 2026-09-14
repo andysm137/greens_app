@@ -25,17 +25,27 @@ class EventsScreen extends StatefulWidget {
   State<EventsScreen> createState() => _EventsScreenState();
 }
 
-class _EventsScreenState extends State<EventsScreen> {
+class _EventsScreenState extends State<EventsScreen>
+    with SingleTickerProviderStateMixin {
   final SupabaseClient _supabase = Supabase.instance.client;
+  late final TabController _eventTypeController;
   bool _hidePastEvents = true;
+  String _selectedEventType = 'Booking';
   String? _eventToExpandId;
   String? _memberToHighlightId;
 
   @override
   void initState() {
     super.initState();
+    _eventTypeController = TabController(length: 2, vsync: this);
     _eventToExpandId = widget.initialEventId;
     _memberToHighlightId = widget.highlightMemberId;
+  }
+
+  @override
+  void dispose() {
+    _eventTypeController.dispose();
+    super.dispose();
   }
 
   @override
@@ -157,8 +167,26 @@ class _EventsScreenState extends State<EventsScreen> {
 
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
+    final linkedEvent = _eventToExpandId == null
+        ? null
+        : events.where((event) => event.id == _eventToExpandId).firstOrNull;
+    if (linkedEvent != null && linkedEvent.eventType != _selectedEventType) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedEventType != linkedEvent.eventType) {
+          setState(() {
+            _selectedEventType = linkedEvent.eventType;
+            _eventTypeController.animateTo(
+              linkedEvent.eventType == 'Booking' ? 0 : 1,
+            );
+          });
+        }
+      });
+    }
+    final typeEvents =
+        events.where((event) => event.eventType == _selectedEventType).toList()
+          ..sort((left, right) => left.eventDate.compareTo(right.eventDate));
     final visibleEvents = _hidePastEvents
-        ? events
+        ? typeEvents
               .where(
                 (event) => !DateTime(
                   event.eventDate.year,
@@ -167,23 +195,34 @@ class _EventsScreenState extends State<EventsScreen> {
                 ).isBefore(todayOnly),
               )
               .toList()
-        : events;
+        : typeEvents;
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              const Text('Hide past events'),
-              Switch(
-                value: _hidePastEvents,
-                onChanged: (value) => setState(() => _hidePastEvents = value),
-              ),
-            ],
+        TabBar(
+          tabs: const [
+            Tab(text: 'Bookings'),
+            Tab(text: 'Practices'),
+          ],
+          onTap: (index) => setState(
+            () => _selectedEventType = index == 0 ? 'Booking' : 'Practice',
           ),
+          controller: _eventTypeController,
         ),
+        if (widget.isLeaderOrAdmin)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                const Text('Hide past events'),
+                Switch(
+                  value: _hidePastEvents,
+                  onChanged: (value) => setState(() => _hidePastEvents = value),
+                ),
+              ],
+            ),
+          ),
         Expanded(
           child: visibleEvents.isEmpty
               ? Center(
@@ -393,9 +432,7 @@ class _EventsScreenState extends State<EventsScreen> {
       comment = await _showCommentDialog(title: 'Maybe response');
       if (!mounted || comment == null) return;
     } else if (status == 'Not Attending' && changingAwayFromYes) {
-      comment = await _showCommentDialog(
-        title: 'Reason for changing to No',
-      );
+      comment = await _showCommentDialog(title: 'Reason for changing to No');
       if (!mounted || comment == null) return;
     }
     await _setOwnRsvp(event, status, comment: comment);
@@ -461,7 +498,9 @@ class _EventsScreenState extends State<EventsScreen> {
           controller: controller,
           autofocus: true,
           maxLines: 3,
-          decoration: const InputDecoration(labelText: 'We might already be counting on you!'),
+          decoration: const InputDecoration(
+            labelText: 'We might already be counting on you!',
+          ),
         ),
         actions: [
           TextButton(
@@ -1314,7 +1353,7 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList>
                           padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
                           child: Text(
                             item.heading!,
-                            style: Theme.of(context).textTheme.titleSmall,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         );
                       }
@@ -1334,47 +1373,47 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList>
                               )
                             : null,
                         child: ListTile(
-                        dense: true,
-                        title: Text(
-                          member['full_name'] ?? 'Unknown Member',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: comment?.isNotEmpty == true
-                            ? Text(comment!)
-                            : widget.isLeaderOrAdmin
-                            ? const Text(
-                                'Tap a status to override response',
-                                style: TextStyle(fontSize: 10),
-                              )
-                            : null,
-                        trailing: widget.isLeaderOrAdmin
-                            ? Wrap(
-                                spacing: 4,
-                                children: [
-                                  _statusChoice(
-                                    memberId,
-                                    status,
-                                    'Attending',
-                                    'Yes',
-                                    Colors.green,
-                                  ),
-                                  _statusChoice(
-                                    memberId,
-                                    status,
-                                    'Maybe',
-                                    'Maybe',
-                                    Colors.orange,
-                                  ),
-                                  _statusChoice(
-                                    memberId,
-                                    status,
-                                    'Not Attending',
-                                    'No',
-                                    Colors.red,
-                                  ),
-                                ],
-                              )
-                            : _statusBadge(status),
+                          dense: true,
+                          title: Text(
+                            member['full_name'] ?? 'Unknown Member',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: comment?.isNotEmpty == true
+                              ? Text(comment!)
+                              : widget.isLeaderOrAdmin
+                              ? const Text(
+                                  'Tap a status to override response',
+                                  style: TextStyle(fontSize: 10),
+                                )
+                              : null,
+                          trailing: widget.isLeaderOrAdmin
+                              ? Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    _statusChoice(
+                                      memberId,
+                                      status,
+                                      'Attending',
+                                      'Yes',
+                                      Colors.green,
+                                    ),
+                                    _statusChoice(
+                                      memberId,
+                                      status,
+                                      'Maybe',
+                                      'Maybe',
+                                      Colors.orange,
+                                    ),
+                                    _statusChoice(
+                                      memberId,
+                                      status,
+                                      'Not Attending',
+                                      'No',
+                                      Colors.red,
+                                    ),
+                                  ],
+                                )
+                              : _statusBadge(status),
                         ),
                       );
                     },

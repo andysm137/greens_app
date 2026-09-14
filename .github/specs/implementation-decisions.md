@@ -1,6 +1,6 @@
 # Implementation Decisions
 
-Updated 2026-09-12.
+Updated 2026-09-14.
 
 ## Authentication
 
@@ -29,6 +29,7 @@ Updated 2026-09-12.
 - Primary dancers are bold; all viable attending `L/Q/M` candidates remain visible even when a primary exists.
 - Non-compliant dances are greyed out when unique dancer coverage cannot satisfy every active position, including enabled MAF/MAB positions.
 - Practices are included in the Set Sheet selector as well as Bookings.
+- Events are presented in separate Booking and Practice tabs, sorted chronologically within each tab. Event notification deep links select the matching tab before expanding the target event.
 - A primary dancer cannot be used in more than one position for the same booking and dance; this is checked in the UI and can be enforced with `20260912_unique_primary_dancers.sql`.
 - The Set Sheet no longer queries legacy `booking_set_layouts`; active output uses booking assignments/settings, RSVP data, competencies, roster, musicians, and dance catalog data.
 
@@ -58,3 +59,4 @@ Updated 2026-09-12.
 - The migration `supabase/migrations/20260913_admin_member_operations.sql` must be applied before the legacy invite, delete, and registration-status functions can perform their protected operations.
 - The migration `supabase/migrations/20260913_member_competency_access.sql` grants members access only to competency rows linked to their own Auth/profile identity; leaders/admins retain broader competency access.
 - Edge Functions must be deployed after changes before the Flutter workflow can use them.
+- The Admin notification settings list includes `competency_updated`; its enablement is enforced server-side by `send-push-notification`.

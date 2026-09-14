@@ -221,6 +221,8 @@ The same bell opens the recent in-app notification list. Unread items are highli
 
 Selecting a notification with an event reference marks it read and opens the Events workspace with that event expanded. RSVP notifications show the event, member, and From/New values; they are delivered only to Leaders and Admins.
 
+The Events workspace separates `Booking` and `Practice` items into tabs, each sorted by event date. Event-linked notifications select the matching tab before expanding the linked event, so notification navigation remains valid regardless of the event type.
+
 ## Notification Types
 
 - `event_created`: a new Booking or Practice is created.
@@ -256,6 +258,7 @@ Run this smoke test after deployment changes and before releasing a new PWA buil
 4. Re-enable it, enter a distinctive template override, save, send a test, and confirm the override text arrives.
 5. Clear the override, save, and confirm the standard server text returns.
 6. Sign in as a Leader and Member; confirm neither can edit settings or send Admin tests.
+7. Toggle `Competency updated`; confirm the row is available in Admin Notifications and that its enabled/disabled state is respected by the sender.
 
 ### C. Immediate event notifications
 
@@ -264,6 +267,7 @@ Run this smoke test after deployment changes and before releasing a new PWA buil
 3. Edit the date, location, description, or response deadline; recipients should receive `event_details_changed` notifications.
 4. As a Member, change an RSVP to Attending, Maybe, and Not Attending; Leaders/Admins should receive `rsvp_changed` notifications.
 5. Verify that an event or RSVP write still succeeds if push delivery is unavailable.
+6. Open an event-linked notification for both a Booking and a Practice; confirm the correct Events tab opens and the event expands.
 
 ### D. Scheduled deadline reminders
 

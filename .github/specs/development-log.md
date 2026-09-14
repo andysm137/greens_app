@@ -99,6 +99,9 @@ Primary roles:
 - Added the event type (Practice/Booking) to the Edit Event dialog (`_EventDetailsDialogState` in `events_screen.dart`): shown read-only in the detail view, editable as a dropdown alongside the other fields, saved to `events.event_type`, and included in the `event_details_changed` notification's change summary.
 - Skill Matrix member ordering (`_members` in `skill_matrix_view.dart`) is now Dancers first, then Musicians, each group sorted alphabetically by name; used by both the By Dance table rows and the By Dancer dropdown.
 - Skill Matrix cross-navigation: member names in the By Dance table are clickable and jump to the By Dancer view for that member (`_jumpToDancer`); dance names in the By Dancer table are clickable (Leader/Admin only, since By Dance is restricted) and jump to the By Dance view for that dance (`_jumpToDance`).
+- Added `supabase/functions/deno.json` so Supabase Edge Functions are recognized as Deno projects by the Deno-aware editor tooling; explicitly typed the notification sender request and recipient rows. The generic workspace diagnostics may still report unresolved `Deno`/URL imports unless the VS Code Deno extension is enabled for `supabase/functions`.
+- Added Booking/Practice tabs to Events with date sorting and notification-linked event tab selection; members retain hidden past events without seeing the switch; bolded RSVP group headings; sorted the Admin dance catalog alphabetically; added the Competency notification setting; tightened Skill Matrix chips; and moved the Dance Builder past-event switch to the title row.
+- Sorted dance names case-insensitively in shared catalog results and all remaining Builder/Set Sheet collections, and constrained Skill Matrix chips to 32px inside fixed 48px rows so visible gaps remain above and below the chips.
 
 ## Product TODOs
 
@@ -160,7 +163,7 @@ Flutter:
 - `lib/screens/events_screen.dart`: event list, RSVP controls, and grouped musician/dancer roster.
 - `lib/screens/dance_builder_view.dart`: event filtering, attendance-aware lineup candidates, primary assignments, and equal-height position matrix rows.
 - `lib/screens/set_sheet_view.dart`: printable event set sheet with Dance Builder-aligned candidate lists and equal-height position rows.
-- `lib/screens/admin_view.dart`: roster, profile editing, invitations, deletion, and catalog administration.
+- `lib/screens/admin_view.dart`: roster, profile editing, invitations, deletion, alphabetical catalog administration, and notification settings.
 - `lib/services/team_repository.dart`: current data access, still broad and due for feature-specific separation.
 - `lib/services/admin_auth_service.dart`: Edge Function calls for admin member operations.
 - `lib/services/notification_settings_repository.dart`: Admin notification settings CRUD and per-type test-send.
@@ -283,20 +286,20 @@ For PWA deployment:
 
 1. Verify the GitHub Actions `Publish to Pages repository` step and `PAGES_REPO_TOKEN`.
 2. Confirm the PWA appears at `https://andysm137.github.io/SilkstoneGreensApp/` after a fresh workflow run.
-3. Verify the Supabase migration and all four Edge Functions.
+3. Verify the Supabase notification migrations and deployed Edge Functions after any backend change.
 4. Test Add Member, edit, Send Invite, invitation completion, status refresh, and delete.
 5. Apply and verify `supabase/migrations/20260912_booking_assignments.sql`.
 6. Apply and verify `supabase/migrations/20260912_booking_dance_settings.sql`.
 7. Migrate or retire legacy `dance_assignments` data deliberately.
 8. Capture live constraints, foreign keys, triggers, and functions.
 9. Re-export the RLS policy snapshot and manually test member, leader, and admin boundaries.
-10. Verify Admin notification enablement, template override, and subscription ownership controls using the deployed test sender.
-11. Add event-trigger dispatch and scheduled deadline-reminder delivery with duplicate-send protection.
-12. Replace the stale widget test and add repository/auth, RLS, and notification coverage.
+10. Verify Admin notification enablement, template override, competency toggle, and subscription ownership controls using the deployed test sender.
+11. Verify event-trigger dispatch and scheduled deadline-reminder delivery with duplicate-send protection.
+12. Replace the stale widget test and add repository/auth, RLS, event-tab/deep-link, and notification coverage.
 13. Refactor the broad repository into feature-specific services.
 14. Decide whether to implement email OTP or magic-link login.
 15. Add the signed-in Change Password account action.
-16. Complete responsive layouts for Events, Dance Builder, and Admin.
+16. Complete responsive layouts for Events, Dance Builder, and Admin, including the new event tabs and title-row controls.
 17. Continue with booking validation and Set Sheet.
 18. Retire legacy `booking_set_layouts` after data preservation and owner-level permission checks.
 19. Keep local web validation on the generated `build/web` directory, using `$webPath = (Resolve-Path .\build\web).Path` before starting `dhttpd`.

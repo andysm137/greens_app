@@ -41,8 +41,7 @@ class TeamRepository {
 
   /// Creates a new team member using a Map payload from the Admin view
   Future<void> createTeamMember(Map<String, dynamic> data) async {
-    final payload = Map<String, dynamic>.from(data)
-      ..remove('instruments');
+    final payload = Map<String, dynamic>.from(data)..remove('instruments');
     final member = await _supabase
         .from('team_members')
         .insert(payload)
@@ -72,13 +71,9 @@ class TeamRepository {
     String memberId,
     Map<String, dynamic> data,
   ) async {
-    final payload = Map<String, dynamic>.from(data)
-      ..remove('instruments');
+    final payload = Map<String, dynamic>.from(data)..remove('instruments');
     await _supabase.from('team_members').update(payload).eq('id', memberId);
-    await _replaceMusicianProfiles(
-      memberId,
-      data['instruments']?.toString(),
-    );
+    await _replaceMusicianProfiles(memberId, data['instruments']?.toString());
   }
 
   Future<void> _replaceMusicianProfiles(
@@ -100,10 +95,7 @@ class TeamRepository {
 
     await _supabase.from('musician_profiles').insert([
       for (final instrument in names)
-        {
-          'member_id': memberId,
-          'primary_instrument': instrument,
-        },
+        {'member_id': memberId, 'primary_instrument': instrument},
     ]);
   }
 
@@ -164,9 +156,13 @@ class TeamRepository {
   /// Fetches simple list of dance names
   Future<List<String>> fetchDanceNames() async {
     final response = await _supabase.from('dance_catalog').select('dance_name');
-    return (response as List)
+    final dances = (response as List)
         .map((map) => map['dance_name'].toString())
         .toList();
+    dances.sort(
+      (left, right) => left.toLowerCase().compareTo(right.toLowerCase()),
+    );
+    return dances;
   }
 
   /// Creates a new dance entry in the catalog by name
@@ -196,7 +192,13 @@ class TeamRepository {
   /// Fetches full details for all catalog dances
   Future<List<Map<String, dynamic>>> fetchDanceCatalogDetails() async {
     final response = await _supabase.from('dance_catalog').select();
-    return List<Map<String, dynamic>>.from(response);
+    final dances = List<Map<String, dynamic>>.from(response);
+    dances.sort(
+      (left, right) => (left['dance_name'] as String).toLowerCase().compareTo(
+        (right['dance_name'] as String).toLowerCase(),
+      ),
+    );
+    return dances;
   }
 
   /// Fetches all dances from dance_catalog including notes
@@ -254,13 +256,16 @@ class TeamRepository {
     required bool hasMab,
     String? notes,
   }) async {
-    await _supabase.from('dance_catalog').update({
-      'dance_name': danceName.trim(),
-      'standard_positions': standardPositions,
-      'has_maf': hasMaf,
-      'has_mab': hasMab,
-      'notes': notes?.trim(),
-    }).eq('dance_name', oldDanceName);
+    await _supabase
+        .from('dance_catalog')
+        .update({
+          'dance_name': danceName.trim(),
+          'standard_positions': standardPositions,
+          'has_maf': hasMaf,
+          'has_mab': hasMab,
+          'notes': notes?.trim(),
+        })
+        .eq('dance_name', oldDanceName);
   }
 
   // ==========================================

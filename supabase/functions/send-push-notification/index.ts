@@ -23,7 +23,7 @@ const standardMessages: Record<string, { title: string; body: string }> = {
   test: { title: "Notifications enabled", body: "Silkstone Greens notifications are working on this browser." },
 };
 
-Deno.serve(async (request) => {
+Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
@@ -159,14 +159,14 @@ Deno.serve(async (request) => {
       { p_leaders_only: notificationType === "rsvp_changed" },
     );
     if (recipientError) return json({ error: recipientError.message }, 400);
-    targetMemberIds = (recipients ?? []).map((recipient) => recipient.member_id as string);
+    targetMemberIds = (recipients ?? []).map((recipient: { member_id: string }) => recipient.member_id);
   } else if (notificationType === "competency_updated") {
     const { data: recipients, error: recipientError } = await client.rpc(
       "get_event_notification_recipients",
       { p_leaders_only: true },
     );
     if (recipientError) return json({ error: recipientError.message }, 400);
-    targetMemberIds = (recipients ?? []).map((recipient) => recipient.member_id as string);
+    targetMemberIds = (recipients ?? []).map((recipient: { member_id: string }) => recipient.member_id);
   }
 
   const subscriptions = [] as Array<{ id: string; endpoint: string; p256dh: string; auth: string }>;

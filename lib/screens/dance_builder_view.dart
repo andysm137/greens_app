@@ -68,16 +68,22 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
           .from('events')
           .select()
           .order('event_date', ascending: true);
+      final sortedDances = List<Map<String, dynamic>>.from(dances)
+        ..sort(
+          (left, right) => (left['dance_name'] as String)
+              .toLowerCase()
+              .compareTo((right['dance_name'] as String).toLowerCase()),
+        );
       if (!mounted) return;
       setState(() {
-        _dances = dances;
+        _dances = sortedDances;
         _members = members;
         _events = (eventResponse as List)
             .map((item) => EventModel.fromMap(item))
             .toList();
-        _selectedDance ??= dances.isEmpty
+        _selectedDance ??= sortedDances.isEmpty
             ? null
-            : dances.first['dance_name'] as String;
+            : sortedDances.first['dance_name'] as String;
         _selectedEvent ??= _firstAvailableEvent(_events);
       });
       await _refreshBookingData();
@@ -515,9 +521,17 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Dance Builder & Lineup Selector',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Dance Builder & Lineup Selector',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const Text('Hide past events'),
+              Switch(value: _hidePastEvents, onChanged: _setHidePastEvents),
+            ],
           ),
           const SizedBox(height: 12),
           Card(
@@ -551,16 +565,6 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                     },
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      const Text('Hide past events'),
-                      Switch(
-                        value: _hidePastEvents,
-                        onChanged: _setHidePastEvents,
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: _selectedDance,

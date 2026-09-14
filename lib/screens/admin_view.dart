@@ -55,7 +55,10 @@ class _AdminViewState extends State<AdminView>
 
       setState(() {
         _members = members;
-        _danceList = dances;
+        _danceList = List<String>.from(dances)
+          ..sort(
+            (left, right) => left.toLowerCase().compareTo(right.toLowerCase()),
+          );
         _memberStatuses = statuses;
       });
     } catch (e) {
@@ -468,6 +471,7 @@ class _NotificationSettingsTabState extends State<_NotificationSettingsTab> {
     'event_status_changed': 'Event marked Go or No-go',
     'rsvp_changed': 'RSVP response changed',
     'event_details_changed': 'Event details changed',
+    'competency_updated': 'Competency updated',
   };
 
   bool _isLoading = true;
