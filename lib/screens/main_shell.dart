@@ -60,6 +60,11 @@ class _MainShellState extends State<MainShell> {
                   onPressed: _enableNotifications,
                 ),
                 IconButton(
+                  tooltip: 'Disable notifications on this browser',
+                  icon: const Icon(Icons.notifications_off_outlined),
+                  onPressed: _disableNotifications,
+                ),
+                IconButton(
                   tooltip: 'Sign out',
                   icon: const Icon(Icons.logout),
                   onPressed: () => Supabase.instance.client.auth.signOut(),
@@ -98,6 +103,25 @@ class _MainShellState extends State<MainShell> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Unable to enable notifications: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _disableNotifications() async {
+    try {
+      await _notificationSubscriptionService.disableForCurrentBrowser();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Notifications disabled on this browser.'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to disable notifications: $error')),
         );
       }
     }

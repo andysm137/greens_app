@@ -20,7 +20,7 @@ external bool _isSupported();
 external JSPromise<JSString> _subscribe(JSString vapidPublicKey);
 
 @JS('greensPush.unsubscribe')
-external JSPromise<JSBoolean> _unsubscribe();
+external JSPromise<JSString> _unsubscribe();
 
 class PushNotifications {
   static bool get isSupported => _isSupported();
@@ -36,7 +36,7 @@ class PushNotifications {
     );
   }
 
-  static Future<void> unsubscribe() async {
-    await _unsubscribe().toDart;
+  static Future<String> unsubscribe() async {
+    return (await _unsubscribe().toDart).toDart;
   }
 }

@@ -25,6 +25,20 @@ class _EventsScreenState extends State<EventsScreen> {
   final SupabaseClient _supabase = Supabase.instance.client;
   bool _hidePastEvents = true;
 
+  Future<void> _dispatchNotification(
+    String notificationType,
+    String eventId,
+  ) async {
+    try {
+      await _supabase.functions.invoke(
+        'send-push-notification',
+        body: {'notification_type': notificationType, 'event_id': eventId},
+      );
+    } catch (_) {
+      // Notification delivery must not block the event or RSVP write.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -298,6 +312,7 @@ class _EventsScreenState extends State<EventsScreen> {
       'comment': comment,
       'updated_at': DateTime.now().toIso8601String(),
     }, onConflict: 'event_id,member_id');
+    await _dispatchNotification('rsvp_changed', event.id);
     setState(() {});
   }
 
@@ -332,6 +347,7 @@ class _EventsScreenState extends State<EventsScreen> {
 
   Future<void> _updateEventStatus(String eventId, String status) async {
     await _supabase.from('events').update({'status': status}).eq('id', eventId);
+    await _dispatchNotification('event_status_changed', eventId);
     setState(() {});
   }
 
@@ -480,16 +496,24 @@ class _EventsScreenState extends State<EventsScreen> {
                   createdAt: DateTime.now(),
                   updatedAt: DateTime.now(),
                 );
-                await _supabase.from('events').insert({
-                  'title': newEvent.title,
-                  'event_type': newEvent.eventType,
-                  'event_date': newEvent.eventDate.toIso8601String(),
-                  'location': newEvent.location,
-                  'description': newEvent.description,
-                  'response_deadline': newEvent.responseDeadline
-                      ?.toIso8601String(),
-                  'status': newEvent.status,
-                });
+                final insertedEvent = await _supabase
+                    .from('events')
+                    .insert({
+                      'title': newEvent.title,
+                      'event_type': newEvent.eventType,
+                      'event_date': newEvent.eventDate.toIso8601String(),
+                      'location': newEvent.location,
+                      'description': newEvent.description,
+                      'response_deadline': newEvent.responseDeadline
+                          ?.toIso8601String(),
+                      'status': newEvent.status,
+                    })
+                    .select('id')
+                    .single();
+                await _dispatchNotification(
+                  'event_created',
+                  insertedEvent['id'].toString(),
+                );
                 Navigator.pop(context);
               }
             },
@@ -783,6 +807,17 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
             'response_deadline': _responseDeadline?.toIso8601String(),
           })
           .eq('id', widget.event.id);
+      try {
+        await Supabase.instance.client.functions.invoke(
+          'send-push-notification',
+          body: {
+            'notification_type': 'event_details_changed',
+            'event_id': widget.event.id,
+          },
+        );
+      } catch (_) {
+        // Notification delivery must not block saving event details.
+      }
       widget.onSaved();
       if (mounted) Navigator.pop(context);
     } catch (error) {

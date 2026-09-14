@@ -70,6 +70,9 @@ Primary roles:
 - Applied `20260914_register_push_subscription.sql` to register browser subscriptions through a database-native, legacy-profile-aware RPC after direct RLS registration was rejected by Supabase.
 - Applied `20260914_push_delivery_access.sql` to give the deployed notification sender server-only access to subscription encryption keys and stale-subscription cleanup.
 - Verified end-to-end Web Push: browser permission, subscription registration, hosted VAPID configuration, and server-generated test delivery all succeeded.
+- Added a member-facing browser-specific disable action; `20260914_unregister_push_subscription.sql` is pending application before that control can remove the stored endpoint.
+- Wired immediate event notifications for event creation, status changes, event detail changes, and RSVP changes; the deployed sender selects recipients and applies Admin notification settings/templates server-side.
+- Added and deployed `send-deadline-reminders`, which uses Admin-configured reminder days, skips responded members, and prevents duplicate sends with `notification_deliveries`.
 
 ## Product TODOs
 
@@ -108,7 +111,8 @@ Notifications:
 
 - [ ] Verify only Admins can manage notification settings while members can manage only their own subscriptions.
 - [ ] Verify notification settings disable delivery and message-template overrides appear in delivered notifications.
-- [ ] Add event-trigger dispatch and a scheduled deadline-reminder invocation using the deployed sender function.
+- [ ] Add a scheduled deadline-reminder invocation with duplicate-send protection using the deployed sender function.
+- [ ] Apply `20260914_deadline_reminders.sql` and configure a daily Supabase scheduled invocation for `send-deadline-reminders` using Vault/cron-held service authorization.
 - [ ] Add a member-facing action to disable notifications on the current browser and remove its stored subscription.
 
 Reliability and structure:
@@ -154,6 +158,9 @@ Supabase:
 - `supabase/functions/push-configuration/index.ts`: authenticated public VAPID-key endpoint.
 - `supabase/functions/send-push-notification/index.ts`: server-owned Web Push sender, settings enforcement, templates, and browser-subscription cleanup.
 - `supabase/functions/register-push-subscription/index.ts`: authenticated server-side browser subscription registration.
+- `supabase/functions/send-deadline-reminders/index.ts`: deployed deadline reminder sender with response filtering and duplicate claims.
+- `supabase/migrations/20260914_deadline_reminders.sql`: pending reminder delivery log and scheduler hand-off SQL.
+- `.github/specs/notification-system-operations.md`: Admin, Leader, and Member notification configuration, deployment, testing, and troubleshooting guide.
 
 PWA deployment:
 

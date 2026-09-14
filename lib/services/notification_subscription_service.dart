@@ -39,4 +39,13 @@ class NotificationSubscriptionService {
       body: {'notification_type': 'test', 'target_member_id': memberId},
     );
   }
+
+  Future<void> disableForCurrentBrowser() async {
+    final endpoint = await PushNotifications.unsubscribe();
+    if (endpoint.isEmpty) return;
+    await _supabase.rpc(
+      'unregister_push_subscription',
+      params: {'p_endpoint': endpoint},
+    );
+  }
 }

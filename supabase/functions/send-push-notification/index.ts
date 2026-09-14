@@ -46,6 +46,7 @@ Deno.serve(async (request) => {
   const body = await request.json();
   const notificationType = typeof body.notification_type === "string" ? body.notification_type : "";
   const requestedTargetMemberId = typeof body.target_member_id === "string" ? body.target_member_id : "";
+  const eventId = typeof body.event_id === "string" ? body.event_id : "";
   if (!standardMessages[notificationType]) {
     return json({ error: "A supported notification type is required" }, 400);
   }
@@ -62,12 +63,20 @@ Deno.serve(async (request) => {
         .maybeSingle()).data
     : null);
   if (!caller) return json({ error: "Team profile not found" }, 403);
-  const targetMemberId = requestedTargetMemberId || caller.id;
-  if (notificationType !== "test" && !caller.is_leader && !caller.is_admin) {
+  if (notificationType !== "test" && notificationType !== "rsvp_changed" && !caller.is_leader && !caller.is_admin) {
     return json({ error: "Leader or admin access required" }, 403);
   }
-  if (notificationType === "test" && caller.id !== targetMemberId) {
+  if (notificationType === "test" && requestedTargetMemberId && caller.id !== requestedTargetMemberId) {
     return json({ error: "Test notifications can only be sent to your own devices" }, 403);
+  }
+
+  if (eventId) {
+    const { data: event } = await client
+      .from("events")
+      .select("id")
+      .eq("id", eventId)
+      .maybeSingle();
+    if (!event) return json({ error: "Event not found" }, 404);
   }
 
   const { data: setting } = await client
@@ -85,11 +94,23 @@ Deno.serve(async (request) => {
     body: setting?.message_template?.trim() || message.body,
     url: "../",
   });
-  const { data: subscriptions, error: subscriptionsError } = await client.rpc(
-    "get_push_subscriptions_for_delivery",
-    { p_member_id: targetMemberId },
-  );
-  if (subscriptionsError) return json({ error: subscriptionsError.message }, 400);
+  let targetMemberIds = requestedTargetMemberId ? [requestedTargetMemberId] : [caller.id];
+  if (eventId) {
+    const { data: recipients } = notificationType === "rsvp_changed"
+      ? await client.from("team_members").select("id").or("is_leader.eq.true,is_admin.eq.true")
+      : await client.from("team_members").select("id");
+    targetMemberIds = (recipients ?? []).map((recipient) => recipient.id as string);
+  }
+
+  const subscriptions = [] as Array<{ id: string; endpoint: string; p256dh: string; auth: string }>;
+  for (const targetMemberId of targetMemberIds) {
+    const { data: memberSubscriptions, error: subscriptionsError } = await client.rpc(
+      "get_push_subscriptions_for_delivery",
+      { p_member_id: targetMemberId },
+    );
+    if (subscriptionsError) return json({ error: subscriptionsError.message }, 400);
+    subscriptions.push(...(memberSubscriptions ?? []));
+  }
 
   webpush.setVapidDetails(subject, publicKey, privateKey);
   let delivered = 0;

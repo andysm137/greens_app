@@ -16,5 +16,5 @@ class PushNotifications {
   static Future<PushSubscriptionData> subscribe(String vapidPublicKey) =>
       throw UnsupportedError('Web push is only available in a browser.');
 
-  static Future<void> unsubscribe() async {}
+  static Future<String> unsubscribe() async => '';
 }
