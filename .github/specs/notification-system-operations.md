@@ -14,6 +14,7 @@ This guide explains how to configure, deploy, and use the Silkstone Greens Web P
 - `register-push-subscription` resolves the signed-in member server-side and registers the browser subscription.
 - `send-push-notification` sends immediate notifications and applies the Admin enablement/template settings.
 - `send-deadline-reminders` sends scheduled deadline reminders and uses `notification_deliveries` to prevent duplicates.
+- `notifications` stores a lightweight in-app inbox with read/unread state; the bell displays its unread count.
 
 ## Database Migrations
 
@@ -24,8 +25,9 @@ Apply these in the Supabase SQL Editor as the database owner, in this order:
 3. `20260914_push_delivery_access.sql`
 4. `20260914_deadline_reminders.sql`
 5. `20260914_unregister_push_subscription.sql`
+6. `20260914_notifications_inbox.sql`
 
-The last migration is currently the remaining database step for the browser-specific Disable notifications action. The other notification migrations have been applied and the test push path has been verified.
+All listed notification migrations have now been applied and the test push path has been verified.
 
 Check the notification tables after applying the migrations:
 
@@ -36,7 +38,8 @@ where table_schema = 'public'
   and table_name in (
     'notification_settings',
     'push_subscriptions',
-    'notification_deliveries'
+    'notification_deliveries',
+    'notifications'
   )
 order by table_name;
 ```
@@ -198,6 +201,8 @@ Leaders should verify that their browser subscription is enabled with the top-ba
 Members can receive enabled event and deadline notifications but cannot edit Admin settings or other members' subscriptions.
 
 The top-bar disable control removes notifications for the current browser only. It does not remove subscriptions from other browsers or devices for the same member.
+
+The same bell opens the recent in-app notification list. Unread items are highlighted and can be marked individually or all at once.
 
 ## Notification Types
 

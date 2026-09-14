@@ -92,6 +92,13 @@ Deno.serve(async (request) => {
       );
       const body = setting.message_template?.trim() ||
         `${event.title} needs your response in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}.`;
+      await client.from("notifications").insert({
+        member_id: memberId,
+        notification_type: "deadline_reminder",
+        title: "Response deadline",
+        body,
+        event_id: event.id,
+      });
       for (const subscription of subscriptions ?? []) {
         try {
           await webpush.sendNotification({

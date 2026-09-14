@@ -89,9 +89,10 @@ Deno.serve(async (request) => {
   }
 
   const message = standardMessages[notificationType];
+  const notificationBody = setting?.message_template?.trim() || message.body;
   const payload = JSON.stringify({
     title: message.title,
-    body: setting?.message_template?.trim() || message.body,
+    body: notificationBody,
     url: "../",
   });
   let targetMemberIds = requestedTargetMemberId ? [requestedTargetMemberId] : [caller.id];
@@ -104,6 +105,13 @@ Deno.serve(async (request) => {
 
   const subscriptions = [] as Array<{ id: string; endpoint: string; p256dh: string; auth: string }>;
   for (const targetMemberId of targetMemberIds) {
+    await client.from("notifications").insert({
+      member_id: targetMemberId,
+      notification_type: notificationType,
+      title: message.title,
+      body: notificationBody,
+      event_id: eventId || null,
+    });
     const { data: memberSubscriptions, error: subscriptionsError } = await client.rpc(
       "get_push_subscriptions_for_delivery",
       { p_member_id: targetMemberId },

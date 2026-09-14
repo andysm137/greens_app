@@ -73,6 +73,7 @@ Primary roles:
 - Added a member-facing browser-specific disable action; `20260914_unregister_push_subscription.sql` is pending application before that control can remove the stored endpoint.
 - Wired immediate event notifications for event creation, status changes, event detail changes, and RSVP changes; the deployed sender selects recipients and applies Admin notification settings/templates server-side.
 - Added and deployed `send-deadline-reminders`, which uses Admin-configured reminder days, skips responded members, and prevents duplicate sends with `notification_deliveries`.
+- Applied `20260914_notifications_inbox.sql`, adding a lightweight unread/read notification inbox; the single bell now shows a badge/list with individual and mark-all read actions, and immediate/deadline sender functions persist inbox records.
 
 ## Product TODOs
 

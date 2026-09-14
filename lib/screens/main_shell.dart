@@ -7,6 +7,7 @@ import 'package:greens_app/screens/events_screen.dart';
 import 'package:greens_app/models/team_member.dart';
 
 import '../services/notification_subscription_service.dart';
+import '../services/notifications_repository.dart';
 import 'skill_matrix_view.dart';
 import 'dance_builder_view.dart';
 import 'set_sheet_view.dart';
@@ -24,6 +25,9 @@ class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
   final NotificationSubscriptionService _notificationSubscriptionService =
       NotificationSubscriptionService();
+  final NotificationsRepository _notificationsRepository =
+      NotificationsRepository();
+  int _unreadNotificationCount = 0;
 
   bool get _isLeaderOrAdmin =>
       widget.currentMember.isLeader || widget.currentMember.isAdmin;
@@ -35,6 +39,19 @@ class _MainShellState extends State<MainShell> {
     if (_isLeaderOrAdmin) 'Set Sheet',
     if (widget.currentMember.isAdmin) 'Admin',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUnreadNotificationCount();
+  }
+
+  Future<void> _refreshUnreadNotificationCount() async {
+    try {
+      final count = await _notificationsRepository.fetchUnreadCount();
+      if (mounted) setState(() => _unreadNotificationCount = count);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,15 +71,40 @@ class _MainShellState extends State<MainShell> {
                       : (widget.currentMember.isLeader ? 'Leader' : 'Member'),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                IconButton(
-                  tooltip: 'Enable notifications',
-                  icon: const Icon(Icons.notifications_outlined),
-                  onPressed: _enableNotifications,
-                ),
-                IconButton(
-                  tooltip: 'Disable notifications on this browser',
-                  icon: const Icon(Icons.notifications_off_outlined),
-                  onPressed: _disableNotifications,
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      tooltip: 'Notifications',
+                      icon: const Icon(Icons.notifications_outlined),
+                      onPressed: _showNotificationMenu,
+                    ),
+                    if (_unreadNotificationCount > 0)
+                      Positioned(
+                        right: 4,
+                        top: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            _unreadNotificationCount > 99
+                                ? '99+'
+                                : '$_unreadNotificationCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 IconButton(
                   tooltip: 'Sign out',
@@ -105,6 +147,83 @@ class _MainShellState extends State<MainShell> {
           SnackBar(content: Text('Unable to enable notifications: $error')),
         );
       }
+    }
+  }
+
+  Future<void> _showNotificationMenu() async {
+    final notifications = await _notificationsRepository.fetchRecent();
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.65,
+          child: Column(
+            children: [
+              ListTile(
+                title: const Text('Notifications'),
+                trailing: TextButton(
+                  onPressed: () => Navigator.pop(context, 'read_all'),
+                  child: const Text('Mark all read'),
+                ),
+              ),
+              Expanded(
+                child: notifications.isEmpty
+                    ? const Center(child: Text('No notifications'))
+                    : ListView.builder(
+                        itemCount: notifications.length,
+                        itemBuilder: (context, index) {
+                          final notification = notifications[index];
+                          final isUnread = notification['read_at'] == null;
+                          return ListTile(
+                            leading: Icon(
+                              isUnread
+                                  ? Icons.notifications_active
+                                  : Icons.notifications_none,
+                            ),
+                            title: Text(notification['title'].toString()),
+                            subtitle: Text(notification['body'].toString()),
+                            tileColor: isUnread
+                                ? Theme.of(context).colorScheme.primaryContainer
+                                      .withValues(alpha: 0.25)
+                                : null,
+                            onTap: isUnread
+                                ? () async {
+                                    await _notificationsRepository.markRead(
+                                      notification['id'].toString(),
+                                    );
+                                    if (context.mounted) {
+                                      Navigator.pop(context, 'refresh');
+                                    }
+                                  }
+                                : null,
+                          );
+                        },
+                      ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: const Text('Enable notifications'),
+                onTap: () => Navigator.pop(context, 'enable'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.notifications_off_outlined),
+                title: const Text('Disable on this browser'),
+                onTap: () => Navigator.pop(context, 'disable'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'enable') await _enableNotifications();
+    if (action == 'disable') await _disableNotifications();
+    if (action == 'read_all') {
+      await _notificationsRepository.markAllRead();
+    }
+    if (action == 'read_all' || action == 'refresh') {
+      await _refreshUnreadNotificationCount();
     }
   }
 
