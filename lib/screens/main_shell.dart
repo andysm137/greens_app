@@ -24,6 +24,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
   String? _pendingEventId;
+  String? _pendingHighlightMemberId;
   String? _pendingDancerId;
   String? _pendingDanceName;
   final NotificationSubscriptionService _notificationSubscriptionService =
@@ -235,9 +236,18 @@ class _MainShellState extends State<MainShell> {
                                     'competency:$dancerId:${Uri.encodeComponent(danceName)}',
                                   );
                                 } else {
+                                  final eventId =
+                                      notification['event_id']?.toString() ??
+                                      '';
+                                  final relatedMemberId =
+                                      notification['related_member_id']
+                                          ?.toString();
                                   Navigator.pop(
                                     context,
-                                    'event:${notification['event_id'] ?? ''}',
+                                    relatedMemberId != null &&
+                                            relatedMemberId.isNotEmpty
+                                        ? 'event:$eventId:$relatedMemberId'
+                                        : 'event:$eventId',
                                   );
                                 }
                               }
@@ -284,10 +294,16 @@ class _MainShellState extends State<MainShell> {
       await _refreshUnreadNotificationCount();
     }
     if (action?.startsWith('event:') == true) {
-      final eventId = action!.substring('event:'.length);
+      final rest = action!.substring('event:'.length);
+      final parts = rest.split(':');
+      final eventId = parts.isNotEmpty ? parts[0] : '';
+      final highlightMemberId = parts.length > 1 && parts[1].isNotEmpty
+          ? parts[1]
+          : null;
       if (eventId.isNotEmpty) {
         setState(() {
           _pendingEventId = eventId;
+          _pendingHighlightMemberId = highlightMemberId;
           _selectedIndex = 0;
         });
       }
@@ -389,11 +405,17 @@ class _MainShellState extends State<MainShell> {
     switch (_selectedIndex) {
       case 0:
         final eventId = _pendingEventId;
+        final highlightMemberId = _pendingHighlightMemberId;
         if (eventId != null) {
           // Consume the pending navigation once so returning to this tab
           // later doesn't keep re-expanding the same event.
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _pendingEventId = null);
+            if (mounted) {
+              setState(() {
+                _pendingEventId = null;
+                _pendingHighlightMemberId = null;
+              });
+            }
           });
         }
         return EventsScreen(
@@ -401,6 +423,7 @@ class _MainShellState extends State<MainShell> {
           isAdmin: widget.currentMember.isAdmin,
           currentMemberId: widget.currentMember.id,
           initialEventId: eventId,
+          highlightMemberId: highlightMemberId,
         );
       case 1:
         final dancerId = _pendingDancerId;

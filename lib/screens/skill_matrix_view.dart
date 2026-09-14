@@ -23,7 +23,8 @@ class SkillsMatrixView extends StatefulWidget {
   State<SkillsMatrixView> createState() => _SkillsMatrixViewState();
 }
 
-class _SkillsMatrixViewState extends State<SkillsMatrixView> {
+class _SkillsMatrixViewState extends State<SkillsMatrixView>
+    with SingleTickerProviderStateMixin {
   final TeamRepository _teamRepository = TeamRepository();
 
   bool _isLoading = true;
@@ -39,6 +40,13 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
   // Currently Selected Filters
   String? _selectedDance;
   TeamMember? _selectedMember;
+  String? _highlightedDanceName;
+  late final AnimationController _highlightFadeController = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 15),
+  )..addListener(() {
+      if (mounted) setState(() {});
+    });
 
   // Proficiency scale
   final List<String> _proficiencyLevels = ['-', 'L', 'YP', 'Y'];
@@ -54,11 +62,52 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     if (!widget.currentMember.isLeader && !widget.currentMember.isAdmin) {
       _currentMode = MatrixMode.byDancer;
     }
-    _loadInitialData();
+    _highlightedDanceName = widget.highlightDanceName;
+    if (_highlightedDanceName != null) _highlightFadeController.forward(from: 0);
+    // Captured now, synchronously: the parent may clear widget.initialDancerId
+    // a frame later, before the awaits below finish.
+    _loadInitialData(widget.initialDancerId);
+  }
+
+  @override
+  void didUpdateWidget(covariant SkillsMatrixView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The Key is constant across tab switches, so a new deep-link request
+    // arrives here rather than through a fresh initState.
+    final dancerId = widget.initialDancerId;
+    if (dancerId != null && dancerId != oldWidget.initialDancerId) {
+      _applyDancerDeepLink(dancerId);
+    }
+    final danceName = widget.highlightDanceName;
+    if (danceName != null && danceName != oldWidget.highlightDanceName) {
+      setState(() => _highlightedDanceName = danceName);
+      _highlightFadeController.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _highlightFadeController.dispose();
+    super.dispose();
+  }
+
+  void _applyDancerDeepLink(String dancerId) {
+    if (!widget.currentMember.isLeader && !widget.currentMember.isAdmin) {
+      return;
+    }
+    if (_members.isEmpty) return;
+    setState(() {
+      _currentMode = MatrixMode.byDancer;
+      _selectedMember = _members.firstWhere(
+        (member) => member.id == dancerId,
+        orElse: () => _selectedMember ?? widget.currentMember,
+      );
+    });
+    _refreshCompetencies();
   }
 
   /// Initial load of team members and dance catalog
-  Future<void> _loadInitialData() async {
+  Future<void> _loadInitialData([String? requestedDancerId]) async {
     setState(() => _isLoading = true);
     try {
       final members = await _teamRepository.fetchTeamMembers();
@@ -66,7 +115,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
       final danceDetails = await _teamRepository.fetchDanceCatalog();
 
       setState(() {
-        _members = members;
+        _members = List<TeamMember>.from(members)..sort(_compareDancersFirst);
         _danceList = dances;
         _danceCatalogDetails = danceDetails;
         _dancePositionCounts = {
@@ -82,18 +131,13 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
                   (member) => member.id == widget.currentMember.id,
                   orElse: () => widget.currentMember,
                 );
-          final deepLinkedDancerId = widget.initialDancerId;
-          if (deepLinkedDancerId != null &&
-              (widget.currentMember.isLeader || widget.currentMember.isAdmin)) {
-            _currentMode = MatrixMode.byDancer;
-            _selectedMember = _members.firstWhere(
-              (member) => member.id == deepLinkedDancerId,
-              orElse: () => _selectedMember!,
-            );
-          }
         }
         if (_danceList.isNotEmpty) _selectedDance = _danceList.first;
       });
+
+      if (requestedDancerId != null) {
+        _applyDancerDeepLink(requestedDancerId);
+      }
 
       await _refreshCompetencies();
     } catch (e) {
@@ -109,6 +153,33 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
 
   int get _selectedDancePositionCount =>
       _dancePositionCounts[_selectedDance] ?? 8;
+
+  Future<void> _jumpToDancer(TeamMember member) async {
+    setState(() {
+      _currentMode = MatrixMode.byDancer;
+      _selectedMember = member;
+    });
+    await _refreshCompetencies();
+  }
+
+  Future<void> _jumpToDance(String danceName) async {
+    final isMember =
+        !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
+    if (isMember) return; // By Dance view is Leader/Admin only.
+    setState(() {
+      _currentMode = MatrixMode.byDance;
+      _selectedDance = danceName;
+    });
+    await _refreshCompetencies();
+  }
+
+  // Dancers group first, then Musicians, each sorted alphabetically by name.
+  int _compareDancersFirst(TeamMember a, TeamMember b) {
+    if (a.isMusician != b.isMusician) {
+      return a.isMusician ? 1 : -1;
+    }
+    return a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase());
+  }
 
   int _positionCountForDance(String danceName) =>
       _dancePositionCounts[danceName] ?? 8;
@@ -477,24 +548,30 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
               cells: [
                 // Column 1: Name and Instrument Subtitle (if applicable)
                 DataCell(
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        member.fullName,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      if (isMusician && member.instruments != null)
+                  InkWell(
+                    onTap: () => _jumpToDancer(member),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          member.instruments!,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic,
-                            color: Colors.purple.shade700,
+                          member.fullName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            decoration: TextDecoration.underline,
                           ),
                         ),
-                    ],
+                        if (isMusician && member.instruments != null)
+                          Text(
+                            member.instruments!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: Colors.purple.shade700,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -540,6 +617,8 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     }
 
     final bool isMusician = _selectedMember!.isMusician;
+    final bool isMember =
+        !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
 
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
@@ -580,17 +659,27 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
             final dancePositionCount = _positionCountForDance(dance);
             final hasMaf = _danceHasRole(dance, 'MAF');
             final hasMab = _danceHasRole(dance, 'MAB');
-            final isHighlighted = dance == widget.highlightDanceName;
+            final isHighlighted = dance == _highlightedDanceName;
 
             return DataRow(
               color: isHighlighted
-                  ? WidgetStateProperty.all(Colors.amber.shade100)
+                  ? WidgetStateProperty.all(
+                      Colors.amber.shade100.withValues(
+                        alpha: 1 - _highlightFadeController.value,
+                      ),
+                    )
                   : null,
               cells: [
                 DataCell(
-                  Text(
-                    dance,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  InkWell(
+                    onTap: isMember ? null : () => _jumpToDance(dance),
+                    child: Text(
+                      dance,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        decoration: isMember ? null : TextDecoration.underline,
+                      ),
+                    ),
                   ),
                 ),
 

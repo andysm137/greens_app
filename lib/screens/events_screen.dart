@@ -10,6 +10,7 @@ class EventsScreen extends StatefulWidget {
   final bool isAdmin;
   final String currentMemberId;
   final String? initialEventId;
+  final String? highlightMemberId;
 
   const EventsScreen({
     super.key,
@@ -17,6 +18,7 @@ class EventsScreen extends StatefulWidget {
     required this.isAdmin,
     required this.currentMemberId,
     this.initialEventId,
+    this.highlightMemberId,
   });
 
   @override
@@ -27,18 +29,27 @@ class _EventsScreenState extends State<EventsScreen> {
   final SupabaseClient _supabase = Supabase.instance.client;
   bool _hidePastEvents = true;
   String? _eventToExpandId;
+  String? _memberToHighlightId;
 
   @override
   void initState() {
     super.initState();
     _eventToExpandId = widget.initialEventId;
+    _memberToHighlightId = widget.highlightMemberId;
   }
 
   @override
   void didUpdateWidget(covariant EventsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialEventId != oldWidget.initialEventId) {
+    // Only latch a genuinely new target; ignore the parent's later null
+    // reset so an in-flight events fetch still finds it once it resolves.
+    if (widget.initialEventId != null &&
+        widget.initialEventId != oldWidget.initialEventId) {
       _eventToExpandId = widget.initialEventId;
+    }
+    if (widget.highlightMemberId != null &&
+        widget.highlightMemberId != oldWidget.highlightMemberId) {
+      _memberToHighlightId = widget.highlightMemberId;
     }
   }
 
@@ -222,7 +233,10 @@ class _EventsScreenState extends State<EventsScreen> {
       onStatusChanged: (status) => _updateEventStatus(event.id, status),
       onDeleteEvent: () => _deleteEvent(event),
       rsvpSectionBuilder: () => _buildRsvpSection(event),
-      membersRsvpListBuilder: () => _buildMembersRsvpList(event),
+      membersRsvpListBuilder: () => _buildMembersRsvpList(
+        event,
+        autoExpand ? _memberToHighlightId : null,
+      ),
       initialExpanded: autoExpand,
     );
   }
@@ -348,7 +362,7 @@ class _EventsScreenState extends State<EventsScreen> {
     return deadline != null && _isPastDate(deadline, DateTime.now());
   }
 
-  Widget _buildMembersRsvpList(EventModel event) {
+  Widget _buildMembersRsvpList(EventModel event, [String? highlightMemberId]) {
     if (!widget.isLeaderOrAdmin) {
       return const SizedBox.shrink();
     }
@@ -357,6 +371,7 @@ class _EventsScreenState extends State<EventsScreen> {
       isLeaderOrAdmin: widget.isLeaderOrAdmin,
       isAdmin: widget.isAdmin,
       supabase: _supabase,
+      highlightMemberId: highlightMemberId,
     );
   }
 
@@ -891,6 +906,7 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
   late final TextEditingController _descriptionController;
   late DateTime _selectedDate;
   DateTime? _responseDeadline;
+  late String _eventType;
   bool _isEditing = false;
   bool _isSaving = false;
 
@@ -906,6 +922,7 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
     );
     _selectedDate = widget.event.eventDate;
     _responseDeadline = widget.event.responseDeadline;
+    _eventType = widget.event.eventType;
   }
 
   @override
@@ -954,6 +971,9 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
       if (_responseDeadline != widget.event.responseDeadline) {
         changes.add('response deadline changed');
       }
+      if (_eventType != widget.event.eventType) {
+        changes.add('event type changed');
+      }
       await Supabase.instance.client
           .from('events')
           .update({
@@ -970,6 +990,7 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
                 ? null
                 : _descriptionController.text.trim(),
             'response_deadline': _responseDeadline?.toIso8601String(),
+            'event_type': _eventType,
           })
           .eq('id', widget.event.id);
       try {
@@ -1012,6 +1033,18 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
                     controller: _titleController,
                     decoration: const InputDecoration(labelText: 'Title'),
                   ),
+                  DropdownButtonFormField<String>(
+                    initialValue: _eventType,
+                    decoration: const InputDecoration(labelText: 'Type'),
+                    items: ['Practice', 'Booking']
+                        .map(
+                          (type) =>
+                              DropdownMenuItem(value: type, child: Text(type)),
+                        )
+                        .toList(),
+                    onChanged: (val) =>
+                        setState(() => _eventType = val ?? _eventType),
+                  ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(
@@ -1045,6 +1078,8 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('Type: ${widget.event.eventType}'),
+                  const SizedBox(height: 8),
                   Text(
                     'Date: ${widget.event.eventDate.day}/${widget.event.eventDate.month}/${widget.event.eventDate.year}',
                   ),
@@ -1102,27 +1137,40 @@ class _StableMembersRsvpList extends StatefulWidget {
   final bool isLeaderOrAdmin;
   final bool isAdmin;
   final SupabaseClient supabase;
+  final String? highlightMemberId;
 
   const _StableMembersRsvpList({
     required this.event,
     required this.isLeaderOrAdmin,
     required this.isAdmin,
     required this.supabase,
+    this.highlightMemberId,
   });
 
   @override
   State<_StableMembersRsvpList> createState() => _StableMembersRsvpListState();
 }
 
-class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
+class _StableMembersRsvpListState extends State<_StableMembersRsvpList>
+    with SingleTickerProviderStateMixin {
   late final Stream<List<Map<String, dynamic>>> _membersStream;
   late final Stream<List<Map<String, dynamic>>> _musicianProfilesStream;
   late final Stream<List<Map<String, dynamic>>> _rsvpStream;
   final Map<String, String> _optimisticStatuses = {};
+  String? _highlightedMemberId;
+  late final AnimationController _highlightFadeController =
+      AnimationController(vsync: this, duration: const Duration(seconds: 10))
+        ..addListener(() {
+          if (mounted) setState(() {});
+        });
 
   @override
   void initState() {
     super.initState();
+    _highlightedMemberId = widget.highlightMemberId;
+    if (_highlightedMemberId != null) {
+      _highlightFadeController.forward(from: 0);
+    }
     _membersStream = widget.supabase
         .from('team_members')
         .stream(primaryKey: ['id'])
@@ -1134,6 +1182,22 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
         .from('event_rsvps')
         .stream(primaryKey: ['id'])
         .eq('event_id', widget.event.id);
+  }
+
+  @override
+  void didUpdateWidget(covariant _StableMembersRsvpList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final memberId = widget.highlightMemberId;
+    if (memberId != null && memberId != oldWidget.highlightMemberId) {
+      setState(() => _highlightedMemberId = memberId);
+      _highlightFadeController.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _highlightFadeController.dispose();
+    super.dispose();
   }
 
   Future<void> _updateRsvp(String memberId, String status) async {
@@ -1262,7 +1326,14 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
                           rsvpMap[memberId]?['rsvp_status']?.toString() ??
                           'No Response';
                       final comment = rsvpMap[memberId]?['comment']?.toString();
-                      return ListTile(
+                      final isHighlighted = memberId == _highlightedMemberId;
+                      return Container(
+                        color: isHighlighted
+                            ? Colors.amber.shade100.withValues(
+                                alpha: 1 - _highlightFadeController.value,
+                              )
+                            : null,
+                        child: ListTile(
                         dense: true,
                         title: Text(
                           member['full_name'] ?? 'Unknown Member',
@@ -1304,6 +1375,7 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
                                 ],
                               )
                             : _statusBadge(status),
+                        ),
                       );
                     },
                   ),
