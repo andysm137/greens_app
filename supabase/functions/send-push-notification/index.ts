@@ -47,6 +47,12 @@ Deno.serve(async (request) => {
   const notificationType = typeof body.notification_type === "string" ? body.notification_type : "";
   const requestedTargetMemberId = typeof body.target_member_id === "string" ? body.target_member_id : "";
   const eventId = typeof body.event_id === "string" ? body.event_id : "";
+  const changeDescription = typeof body.change_description === "string" ? body.change_description : "";
+  const memberId = typeof body.member_id === "string" ? body.member_id : "";
+  const oldStatus = typeof body.old_status === "string" ? body.old_status : "No Response";
+  const newStatus = typeof body.new_status === "string" ? body.new_status : "Updated";
+  let eventTitle = "";
+  let memberName = "";
   if (!standardMessages[notificationType]) {
     return json({ error: "A supported notification type is required" }, 400);
   }
@@ -71,18 +77,23 @@ Deno.serve(async (request) => {
   }
 
   if (eventId) {
-    const { data: event } = await client
-      .from("events")
-      .select("id")
-      .eq("id", eventId)
-      .maybeSingle();
-    if (!event) return json({ error: "Event not found" }, 404);
+    const { data: contexts, error: contextError } = await client.rpc(
+      "get_event_notification_context",
+      { p_event_id: eventId, p_member_id: memberId || null },
+    );
+    if (contextError) return json({ error: contextError.message }, 400);
+    const context = contexts?.[0];
+    if (!context) return json({ error: "Event not found" }, 404);
+    eventTitle = context.event_title as string;
+    memberName = context.member_name as string || "";
   }
 
-  const { data: settings, error: settingError } = await client.rpc(
-    "get_notification_setting_for_delivery",
-    { p_notification_type: notificationType },
-  );
+  const { data: settings, error: settingError } = notificationType === "test"
+    ? { data: [{ is_enabled: true, message_template: null }], error: null }
+    : await client.rpc(
+        "get_notification_setting_for_delivery",
+        { p_notification_type: notificationType },
+      );
   if (settingError) {
     return json({
       error: "Unable to read notification setting",
@@ -107,7 +118,13 @@ Deno.serve(async (request) => {
   }
 
   const message = standardMessages[notificationType];
-  const notificationBody = setting?.message_template?.trim() || message.body;
+  let notificationBody = setting?.message_template?.trim() || message.body;
+  if (eventId) {
+    const context = notificationType === "rsvp_changed"
+      ? `${memberName || "A member"} changed their RSVP for ${eventTitle || "the event"}: From "${oldStatus}" to "${newStatus}"${changeDescription ? ` (${changeDescription})` : ""}.`
+      : `${eventTitle || "Event"}: ${changeDescription || message.body}`;
+    notificationBody = `${notificationBody}\n${context}`;
+  }
   const payload = JSON.stringify({
     title: message.title,
     body: notificationBody,
@@ -115,21 +132,27 @@ Deno.serve(async (request) => {
   });
   let targetMemberIds = requestedTargetMemberId ? [requestedTargetMemberId] : [caller.id];
   if (eventId) {
-    const { data: recipients } = notificationType === "rsvp_changed"
-      ? await client.from("team_members").select("id").or("is_leader.eq.true,is_admin.eq.true")
-      : await client.from("team_members").select("id");
-    targetMemberIds = (recipients ?? []).map((recipient) => recipient.id as string);
+    const { data: recipients, error: recipientError } = await client.rpc(
+      "get_event_notification_recipients",
+      { p_leaders_only: notificationType === "rsvp_changed" },
+    );
+    if (recipientError) return json({ error: recipientError.message }, 400);
+    targetMemberIds = (recipients ?? []).map((recipient) => recipient.member_id as string);
   }
 
   const subscriptions = [] as Array<{ id: string; endpoint: string; p256dh: string; auth: string }>;
   for (const targetMemberId of targetMemberIds) {
-    await client.from("notifications").insert({
-      member_id: targetMemberId,
-      notification_type: notificationType,
-      title: message.title,
-      body: notificationBody,
-      event_id: eventId || null,
-    });
+    const { error: inboxError } = await client.rpc(
+      "insert_notification_for_delivery",
+      {
+        p_member_id: targetMemberId,
+        p_notification_type: notificationType,
+        p_title: message.title,
+        p_body: notificationBody,
+        p_event_id: eventId || null,
+      },
+    );
+    if (inboxError) return json({ error: inboxError.message }, 400);
     const { data: memberSubscriptions, error: subscriptionsError } = await client.rpc(
       "get_push_subscriptions_for_delivery",
       { p_member_id: targetMemberId },

@@ -27,10 +27,19 @@ Apply these in the Supabase SQL Editor as the database owner, in this order:
 5. `20260914_unregister_push_subscription.sql`
 6. `20260914_notifications_inbox.sql`
 7. `20260914_notification_delivery_settings.sql`
+8. `20260914_notification_inbox_delivery_access.sql`
+9. `20260914_event_notification_access.sql`
+10. `20260914_notifications_clear.sql`
 
 All listed notification migrations have now been applied and the test push path has been verified.
 
 The delivery-settings migration is applied; deployed senders read Admin notification settings through the server-only RPC.
+
+The inbox-delivery migration is required for deployed senders to insert unread inbox records through their server-only RPC. Apply it before testing event-triggered or scheduled inbox entries.
+
+The event-notification access migration is required for deployed senders to resolve event titles, RSVP member names, and server-side recipients without relying on direct table RLS reads.
+
+The notifications-clear migration is applied and allows a member to remove only their own inbox records.
 
 Check the notification tables after applying the migrations:
 
@@ -206,6 +215,8 @@ Members can receive enabled event and deadline notifications but cannot edit Adm
 The top-bar disable control removes notifications for the current browser only. It does not remove subscriptions from other browsers or devices for the same member.
 
 The same bell opens the recent in-app notification list. Unread items are highlighted and can be marked individually or all at once.
+
+Selecting a notification with an event reference marks it read and opens the Events workspace with that event expanded. RSVP notifications show the event, member, and From/New values; they are delivered only to Leaders and Admins.
 
 ## Notification Types
 

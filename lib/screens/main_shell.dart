@@ -23,6 +23,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
+  String? _pendingEventId;
   final NotificationSubscriptionService _notificationSubscriptionService =
       NotificationSubscriptionService();
   final NotificationsRepository _notificationsRepository =
@@ -163,8 +164,8 @@ class _MainShellState extends State<MainShell> {
               ListTile(
                 title: const Text('Notifications'),
                 trailing: TextButton(
-                  onPressed: () => Navigator.pop(context, 'read_all'),
-                  child: const Text('Mark all read'),
+                  onPressed: () => Navigator.pop(context, 'actions'),
+                  child: const Text('Actions'),
                 ),
               ),
               Expanded(
@@ -187,19 +188,32 @@ class _MainShellState extends State<MainShell> {
                                 ? Theme.of(context).colorScheme.primaryContainer
                                       .withValues(alpha: 0.25)
                                 : null,
-                            onTap: isUnread
-                                ? () async {
-                                    await _notificationsRepository.markRead(
-                                      notification['id'].toString(),
-                                    );
-                                    if (context.mounted) {
-                                      Navigator.pop(context, 'refresh');
-                                    }
-                                  }
-                                : null,
+                            onTap: () async {
+                              if (isUnread) {
+                                await _notificationsRepository.markRead(
+                                  notification['id'].toString(),
+                                );
+                              }
+                              if (context.mounted) {
+                                Navigator.pop(
+                                  context,
+                                  'event:${notification['event_id'] ?? ''}',
+                                );
+                              }
+                            },
                           );
                         },
                       ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.done_all),
+                title: const Text('Mark all read'),
+                onTap: () => Navigator.pop(context, 'read_all'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_sweep_outlined),
+                title: const Text('Clear all notifications'),
+                onTap: () => Navigator.pop(context, 'clear_all'),
               ),
               ListTile(
                 leading: const Icon(Icons.notifications_active_outlined),
@@ -222,8 +236,20 @@ class _MainShellState extends State<MainShell> {
     if (action == 'read_all') {
       await _notificationsRepository.markAllRead();
     }
-    if (action == 'read_all' || action == 'refresh') {
+    if (action == 'clear_all') {
+      await _notificationsRepository.clearAll();
+    }
+    if (action == 'read_all' || action == 'clear_all') {
       await _refreshUnreadNotificationCount();
+    }
+    if (action?.startsWith('event:') == true) {
+      final eventId = action!.substring('event:'.length);
+      if (eventId.isNotEmpty) {
+        setState(() {
+          _pendingEventId = eventId;
+          _selectedIndex = 0;
+        });
+      }
     }
   }
 
@@ -311,6 +337,7 @@ class _MainShellState extends State<MainShell> {
           isLeaderOrAdmin: _isLeaderOrAdmin,
           isAdmin: widget.currentMember.isAdmin,
           currentMemberId: widget.currentMember.id,
+          initialEventId: _pendingEventId,
         );
       case 1:
         return SkillsMatrixView(currentMember: widget.currentMember);

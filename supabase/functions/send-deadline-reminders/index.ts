@@ -92,12 +92,12 @@ Deno.serve(async (request) => {
       );
       const body = setting.message_template?.trim() ||
         `${event.title} needs your response in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}.`;
-      await client.from("notifications").insert({
-        member_id: memberId,
-        notification_type: "deadline_reminder",
-        title: "Response deadline",
-        body,
-        event_id: event.id,
+      await client.rpc("insert_notification_for_delivery", {
+        p_member_id: memberId,
+        p_notification_type: "deadline_reminder",
+        p_title: "Response deadline",
+        p_body: body,
+        p_event_id: event.id,
       });
       for (const subscription of subscriptions ?? []) {
         try {

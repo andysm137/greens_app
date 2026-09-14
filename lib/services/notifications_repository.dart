@@ -34,4 +34,10 @@ class NotificationsRepository {
         .update({'read_at': DateTime.now().toIso8601String()})
         .isFilter('read_at', null);
   }
+
+  Future<void> clearAll() =>
+        _supabase
+          .from('notifications')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
 }

@@ -75,6 +75,9 @@ Primary roles:
 - Added and deployed `send-deadline-reminders`, which uses Admin-configured reminder days, skips responded members, and prevents duplicate sends with `notification_deliveries`.
 - Applied `20260914_notifications_inbox.sql`, adding a lightweight unread/read notification inbox; the single bell now shows a badge/list with individual and mark-all read actions, and immediate/deadline sender functions persist inbox records.
 - Applied `20260914_notification_delivery_settings.sql` and redeployed both notification senders to read Admin settings through a server-only RPC.
+- Added `20260914_notification_inbox_delivery_access.sql` and redeployed both notification senders so immediate and deadline deliveries insert inbox records through a server-only RPC instead of a direct RLS-blocked table write.
+- Applied `20260914_event_notification_access.sql` and redeployed the immediate sender with server-only event context and recipient access.
+- Applied `20260914_notifications_clear.sql` to allow members to clear only their own notification inbox records.
 
 ## Product TODOs
 

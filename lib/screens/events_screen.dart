@@ -9,12 +9,14 @@ class EventsScreen extends StatefulWidget {
   final bool isLeaderOrAdmin;
   final bool isAdmin;
   final String currentMemberId;
+  final String? initialEventId;
 
   const EventsScreen({
     super.key,
     required this.isLeaderOrAdmin,
     required this.isAdmin,
     required this.currentMemberId,
+    this.initialEventId,
   });
 
   @override
@@ -27,15 +29,31 @@ class _EventsScreenState extends State<EventsScreen> {
 
   Future<void> _dispatchNotification(
     String notificationType,
-    String eventId,
-  ) async {
+    String eventId, {
+    String? changeDescription,
+    String? memberId,
+    String? oldStatus,
+    String? newStatus,
+  }) async {
     try {
       await _supabase.functions.invoke(
         'send-push-notification',
-        body: {'notification_type': notificationType, 'event_id': eventId},
+        body: {
+          'notification_type': notificationType,
+          'event_id': eventId,
+          if (changeDescription != null)
+            'change_description': changeDescription,
+          if (memberId != null) 'member_id': memberId,
+          if (oldStatus != null) 'old_status': oldStatus,
+          if (newStatus != null) 'new_status': newStatus,
+        },
       );
-    } catch (_) {
-      // Notification delivery must not block the event or RSVP write.
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Notification dispatch failed: $error')),
+        );
+      }
     }
   }
 
@@ -131,8 +149,11 @@ class _EventsScreenState extends State<EventsScreen> {
                       )
                     : ListView.builder(
                         itemCount: visibleEvents.length,
-                        itemBuilder: (context, index) =>
-                            _buildEventCard(visibleEvents[index]),
+                        itemBuilder: (context, index) => _buildEventCard(
+                          visibleEvents[index],
+                          autoExpand:
+                              visibleEvents[index].id == widget.initialEventId,
+                        ),
                       ),
               ),
             ],
@@ -142,7 +163,7 @@ class _EventsScreenState extends State<EventsScreen> {
     );
   }
 
-  Widget _buildEventCard(EventModel event) {
+  Widget _buildEventCard(EventModel event, {bool autoExpand = false}) {
     Color statusColor;
     switch (event.status) {
       case 'Go':
@@ -171,6 +192,7 @@ class _EventsScreenState extends State<EventsScreen> {
       onDeleteEvent: () => _deleteEvent(event),
       rsvpSectionBuilder: () => _buildRsvpSection(event),
       membersRsvpListBuilder: () => _buildMembersRsvpList(event),
+      initialExpanded: autoExpand,
     );
   }
 
@@ -300,6 +322,13 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   Future<void> _setOwnRsvp(EventModel event, String status) async {
+    final previous = await _supabase
+        .from('event_rsvps')
+        .select('rsvp_status')
+        .eq('event_id', event.id)
+        .eq('member_id', widget.currentMemberId)
+        .maybeSingle();
+    final oldStatus = previous?['rsvp_status']?.toString() ?? 'No Response';
     String? comment;
     if (status == 'Maybe') {
       comment = await _showMaybeCommentDialog(context);
@@ -312,7 +341,15 @@ class _EventsScreenState extends State<EventsScreen> {
       'comment': comment,
       'updated_at': DateTime.now().toIso8601String(),
     }, onConflict: 'event_id,member_id');
-    await _dispatchNotification('rsvp_changed', event.id);
+    await _dispatchNotification(
+      'rsvp_changed',
+      event.id,
+      changeDescription:
+          '$status${comment?.isNotEmpty == true ? ': $comment' : ''}',
+      memberId: widget.currentMemberId,
+      oldStatus: oldStatus,
+      newStatus: status,
+    );
     setState(() {});
   }
 
@@ -347,7 +384,11 @@ class _EventsScreenState extends State<EventsScreen> {
 
   Future<void> _updateEventStatus(String eventId, String status) async {
     await _supabase.from('events').update({'status': status}).eq('id', eventId);
-    await _dispatchNotification('event_status_changed', eventId);
+    await _dispatchNotification(
+      'event_status_changed',
+      eventId,
+      changeDescription: 'Status changed to $status',
+    );
     setState(() {});
   }
 
@@ -513,6 +554,7 @@ class _EventsScreenState extends State<EventsScreen> {
                 await _dispatchNotification(
                   'event_created',
                   insertedEvent['id'].toString(),
+                  changeDescription: 'A new $type was created',
                 );
                 Navigator.pop(context);
               }
@@ -535,6 +577,7 @@ class _EventStatusCard extends StatefulWidget {
   final VoidCallback onDeleteEvent;
   final Widget Function() rsvpSectionBuilder;
   final Widget Function() membersRsvpListBuilder;
+  final bool initialExpanded;
 
   const _EventStatusCard({
     required this.rowColor,
@@ -546,6 +589,7 @@ class _EventStatusCard extends StatefulWidget {
     required this.onDeleteEvent,
     required this.rsvpSectionBuilder,
     required this.membersRsvpListBuilder,
+    this.initialExpanded = false,
   });
 
   @override
@@ -553,7 +597,7 @@ class _EventStatusCard extends StatefulWidget {
 }
 
 class _EventStatusCardState extends State<_EventStatusCard> {
-  bool _isExpanded = false;
+  late bool _isExpanded = widget.initialExpanded;
 
   @override
   Widget build(BuildContext context) {
@@ -789,6 +833,21 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
   Future<void> _save() async {
     setState(() => _isSaving = true);
     try {
+      final changes = <String>[];
+      if (_titleController.text.trim() != widget.event.title) {
+        changes.add('title changed');
+      }
+      if (_selectedDate != widget.event.eventDate) changes.add('date changed');
+      if (_locationController.text.trim() != (widget.event.location ?? '')) {
+        changes.add('location changed');
+      }
+      if (_descriptionController.text.trim() !=
+          (widget.event.description ?? '')) {
+        changes.add('details changed');
+      }
+      if (_responseDeadline != widget.event.responseDeadline) {
+        changes.add('response deadline changed');
+      }
       await Supabase.instance.client
           .from('events')
           .update({
@@ -813,6 +872,9 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
           body: {
             'notification_type': 'event_details_changed',
             'event_id': widget.event.id,
+            'change_description': changes.isEmpty
+                ? 'Event details updated'
+                : changes.join(', '),
           },
         );
       } catch (_) {
@@ -979,6 +1041,17 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList> {
         'rsvp_status': status,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'event_id,member_id');
+      await widget.supabase.functions.invoke(
+        'send-push-notification',
+        body: {
+          'notification_type': 'rsvp_changed',
+          'event_id': widget.event.id,
+          'member_id': memberId,
+          'old_status': previousStatus ?? 'No Response',
+          'new_status': status,
+          'change_description': 'RSVP changed',
+        },
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() {
