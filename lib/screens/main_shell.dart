@@ -9,6 +9,7 @@ import 'package:greens_app/models/team_member.dart';
 import '../services/notification_subscription_service.dart';
 import '../services/notifications_repository.dart';
 import 'skill_matrix_view.dart';
+import 'booking_skill_matrix_view.dart';
 import 'dance_builder_view.dart';
 import 'set_sheet_view.dart';
 
@@ -41,6 +42,7 @@ class _MainShellState extends State<MainShell> {
     'Bookings',
     'Skill Matrix',
     if (_isLeaderOrAdmin) 'Dance Builder',
+    if (_isLeaderOrAdmin) 'Booking Skill Matrix',
     if (_isLeaderOrAdmin) 'Set Sheet',
     if (widget.currentMember.isAdmin) 'Admin',
   ];
@@ -385,6 +387,11 @@ class _MainShellState extends State<MainShell> {
         ),
       if (_isLeaderOrAdmin)
         const NavigationRailDestination(
+          icon: Icon(Icons.checklist),
+          label: Text('Booking Matrix'),
+        ),
+      if (_isLeaderOrAdmin)
+        const NavigationRailDestination(
           icon: Icon(Icons.description),
           label: Text('Set Sheet'),
         ),
@@ -450,9 +457,13 @@ class _MainShellState extends State<MainShell> {
             : const Center(child: Text('Leader or admin access required.'));
       case 3:
         return _isLeaderOrAdmin
-            ? const SetSheetView()
+            ? const BookingSkillMatrixView()
             : const Center(child: Text('Leader or admin access required.'));
       case 4:
+        return _isLeaderOrAdmin
+            ? const SetSheetView()
+            : const Center(child: Text('Leader or admin access required.'));
+      case 5:
         return widget.currentMember.isAdmin
             ? const AdminView()
             : const Center(child: Text('Admin access required.'));

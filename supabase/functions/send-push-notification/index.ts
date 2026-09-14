@@ -171,7 +171,7 @@ Deno.serve(async (request: Request) => {
 
   const subscriptions = [] as Array<{ id: string; endpoint: string; p256dh: string; auth: string }>;
   for (const targetMemberId of targetMemberIds) {
-    const { error: inboxError } = await client.rpc(
+    const { data: shouldPush, error: inboxError } = await client.rpc(
       "insert_notification_for_delivery",
       {
         p_member_id: targetMemberId,
@@ -187,6 +187,9 @@ Deno.serve(async (request: Request) => {
       },
     );
     if (inboxError) return json({ error: inboxError.message }, 400);
+    // A rapid repeat change was coalesced into the existing unread inbox
+    // row above; skip sending another push for it.
+    if (shouldPush === false) continue;
     const { data: memberSubscriptions, error: subscriptionsError } = await client.rpc(
       "get_push_subscriptions_for_delivery",
       { p_member_id: targetMemberId },

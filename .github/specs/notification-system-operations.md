@@ -33,6 +33,8 @@ Apply these in the Supabase SQL Editor as the database owner, in this order:
 11. `20260914_notifications_clear_privileges.sql`
 12. `20260914_event_notification_context_date.sql`
 13. `20260914_competency_notification_setting.sql`
+14. `20260914_notification_coalescing.sql`
+15. `20260914_notification_coalescing_1min.sql`
 
 All listed notification migrations have now been applied and the test push path has been verified.
 
@@ -233,6 +235,8 @@ The Events workspace separates `Booking` and `Practice` items into tabs, each so
 - `competency_updated`: a member changes their own Skill Matrix competency; delivered to Leaders/Admins only, with the dance, position, and old/new proficiency level.
 
 All delivered notification bodies include a trailing `Sent: <date time> UTC` line.
+
+Rapid repeat changes to the same `(member, type, event, related member)` within a 1-minute window are coalesced into the existing unread inbox row instead of sending another push; only the first in a burst triggers an actual push. This applies to every notification type except `test` — RSVP changes, event status/details changes, event creation, deadline reminders, and competency updates are all covered, keyed per recipient.
 
 Immediate event dispatch is implemented. Scheduled deadline dispatch requires the daily cron job described above.
 

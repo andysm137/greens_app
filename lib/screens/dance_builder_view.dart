@@ -22,6 +22,8 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
   List<Map<String, dynamic>> _dances = [];
   List<TeamMember> _members = [];
   List<Competency> _competencies = [];
+  List<Competency> _allCompetencies = [];
+  Map<String, Map<String, dynamic>> _allBookingDanceSettings = {};
   Map<int, String> _primaryByPosition = {};
   Set<String> _attendingIds = {};
   EventModel? _selectedEvent;
@@ -64,6 +66,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
     try {
       final dances = await _repository.fetchDanceCatalog();
       final members = await _repository.fetchTeamMembers();
+      final allCompetencies = await _repository.fetchAllCompetencies();
       final eventResponse = await _supabase
           .from('events')
           .select()
@@ -78,6 +81,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
       setState(() {
         _dances = sortedDances;
         _members = members;
+        _allCompetencies = allCompetencies;
         _events = (eventResponse as List)
             .map((item) => EventModel.fromMap(item))
             .toList();
@@ -140,11 +144,17 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
       bookingId: event.id,
       danceName: dance,
     );
+    final bookingSettings = await _repository
+        .fetchBookingDanceSettingsForBooking(event.id);
 
     if (!mounted) return;
     setState(() {
       _attendingIds = attending;
       _competencies = competencies;
+      _allBookingDanceSettings = {
+        for (final item in bookingSettings)
+          item['dance_name'] as String: item,
+      };
       _primaryByPosition = {
         for (final item in assignments)
           item['position_number'] as int: item['member_id'].toString(),
@@ -253,8 +263,17 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
       for (var position = 1; position <= _positionCount; position++) position,
       if (_includeMab) 98,
     ];
-    if (positions.any((position) => _candidates(position).isEmpty)) {
-      return true;
+    return !_hasDistinctAssignment(positions, _candidates);
+  }
+
+  // Shared by both the currently selected dance and the dropdown's
+  // per-dance readiness check below.
+  bool _hasDistinctAssignment(
+    List<int> positions,
+    List<TeamMember> Function(int) candidatesFor,
+  ) {
+    if (positions.any((position) => candidatesFor(position).isEmpty)) {
+      return false;
     }
 
     // Check whether every active position can receive a different dancer.
@@ -262,14 +281,15 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
     final assignedDancerByPosition = <int, String>{};
     final positionsByCandidateCount = [...positions]
       ..sort(
-        (left, right) =>
-            _candidates(left).length.compareTo(_candidates(right).length),
+        (left, right) => candidatesFor(
+          left,
+        ).length.compareTo(candidatesFor(right).length),
       );
 
     bool canAssign(int index) {
       if (index == positionsByCandidateCount.length) return true;
       final position = positionsByCandidateCount[index];
-      for (final dancer in _candidates(position)) {
+      for (final dancer in candidatesFor(position)) {
         if (assignedDancerByPosition.containsValue(dancer.id)) continue;
         assignedDancerByPosition[position] = dancer.id;
         if (canAssign(index + 1)) return true;
@@ -278,7 +298,53 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
       return false;
     }
 
-    return !canAssign(0);
+    return canAssign(0);
+  }
+
+  List<TeamMember> _candidatesForDance(
+    List<Competency> danceCompetencies,
+    int position,
+  ) {
+    return _members.where((member) {
+      if (member.isMusician || !_attendingIds.contains(member.id)) {
+        return false;
+      }
+      return danceCompetencies.any(
+        (competency) =>
+            competency.memberId == member.id &&
+            competency.positionNumber == position &&
+            (competency.proficiencyLevel == 'YP' ||
+                competency.proficiencyLevel == 'Y'),
+      );
+    }).toList();
+  }
+
+  /// Whether every required position for [danceCatalogEntry] can be filled by
+  /// a distinct attending, qualified dancer for the currently selected event.
+  bool _isDanceReady(Map<String, dynamic> danceCatalogEntry) {
+    final danceName = danceCatalogEntry['dance_name'] as String;
+    final settings = _allBookingDanceSettings[danceName];
+    final positionCount =
+        settings?['standard_positions'] as int? ??
+        (danceCatalogEntry['standard_positions'] == 12 ? 12 : 8);
+    final hasMaf =
+        settings?['has_maf'] as bool? ??
+        danceCatalogEntry['has_maf'] == true;
+    final hasMab =
+        settings?['has_mab'] as bool? ??
+        danceCatalogEntry['has_mab'] == true;
+    final danceCompetencies = _allCompetencies
+        .where((competency) => competency.danceName == danceName)
+        .toList();
+    final positions = <int>[
+      if (hasMaf) 99,
+      for (var position = 1; position <= positionCount; position++) position,
+      if (hasMab) 98,
+    ];
+    return _hasDistinctAssignment(
+      positions,
+      (position) => _candidatesForDance(danceCompetencies, position),
+    );
   }
 
   Future<void> _showPositionDialog(int position, String label) async {
@@ -577,7 +643,15 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                         .map(
                           (dance) => DropdownMenuItem(
                             value: dance['dance_name'] as String,
-                            child: Text(dance['dance_name'] as String),
+                            child: Text(
+                              dance['dance_name'] as String,
+                              style: _isDanceReady(dance)
+                                  ? const TextStyle(
+                                      color: Color(0xFF1B5E20),
+                                      fontWeight: FontWeight.bold,
+                                    )
+                                  : null,
+                            ),
                           ),
                         )
                         .toList(),

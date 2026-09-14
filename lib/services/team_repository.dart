@@ -149,6 +149,12 @@ class TeamRepository {
     return (response as List).map((map) => Competency.fromMap(map)).toList();
   }
 
+  /// Fetch every competency row, used to evaluate all dances at once
+  Future<List<Competency>> fetchAllCompetencies() async {
+    final response = await _supabase.from('competencies').select();
+    return (response as List).map((map) => Competency.fromMap(map)).toList();
+  }
+
   // ==========================================
   // DANCE CATALOG MANAGEMENT
   // ==========================================
@@ -356,6 +362,17 @@ class TeamRepository {
         .eq('dance_name', danceName)
         .maybeSingle();
     return response;
+  }
+
+  /// Fetch every dance's saved settings for a single booking
+  Future<List<Map<String, dynamic>>> fetchBookingDanceSettingsForBooking(
+    String bookingId,
+  ) async {
+    final response = await _supabase
+        .from('booking_dance_settings')
+        .select()
+        .eq('booking_id', bookingId);
+    return List<Map<String, dynamic>>.from(response);
   }
 
   Future<void> saveBookingDanceSettings({

@@ -419,6 +419,7 @@ class _EventsScreenState extends State<EventsScreen>
     String status,
     String currentRsvp,
   ) async {
+    if (status == currentRsvp) return;
     final bool changingAwayFromYes =
         currentRsvp == 'Attending' && status != 'Attending';
     if (!widget.isLeaderOrAdmin &&
@@ -1462,7 +1463,11 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList>
       selected: selected,
       selectedColor: color,
       visualDensity: VisualDensity.compact,
-      onSelected: _canUpdateRsvp ? (_) => _updateRsvp(memberId, status) : null,
+      onSelected: _canUpdateRsvp
+          ? (_) {
+              if (status != currentStatus) _updateRsvp(memberId, status);
+            }
+          : null,
     );
   }
 
