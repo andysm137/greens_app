@@ -52,6 +52,7 @@ Deno.serve(async (request) => {
   const oldStatus = typeof body.old_status === "string" ? body.old_status : "No Response";
   const newStatus = typeof body.new_status === "string" ? body.new_status : "Updated";
   let eventTitle = "";
+  let eventDate = "";
   let memberName = "";
   if (!standardMessages[notificationType]) {
     return json({ error: "A supported notification type is required" }, 400);
@@ -85,6 +86,7 @@ Deno.serve(async (request) => {
     const context = contexts?.[0];
     if (!context) return json({ error: "Event not found" }, 404);
     eventTitle = context.event_title as string;
+    eventDate = context.event_date as string;
     memberName = context.member_name as string || "";
   }
 
@@ -121,8 +123,8 @@ Deno.serve(async (request) => {
   let notificationBody = setting?.message_template?.trim() || message.body;
   if (eventId) {
     const context = notificationType === "rsvp_changed"
-      ? `${memberName || "A member"} changed their RSVP for ${eventTitle || "the event"}: From "${oldStatus}" to "${newStatus}"${changeDescription ? ` (${changeDescription})` : ""}.`
-      : `${eventTitle || "Event"}: ${changeDescription || message.body}`;
+      ? `${memberName || "A member"} changed their RSVP for ${eventTitle || "the event"} (${eventDate ? eventDate.slice(0, 10) : "date unknown"}): From "${oldStatus}" to "${newStatus}"${changeDescription ? ` (${changeDescription})` : ""}.`
+      : `${eventTitle || "Event"} (${eventDate ? eventDate.slice(0, 10) : "date unknown"}): ${changeDescription || message.body}`;
     notificationBody = `${notificationBody}\n${context}`;
   }
   const payload = JSON.stringify({

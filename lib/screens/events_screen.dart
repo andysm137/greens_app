@@ -26,6 +26,21 @@ class EventsScreen extends StatefulWidget {
 class _EventsScreenState extends State<EventsScreen> {
   final SupabaseClient _supabase = Supabase.instance.client;
   bool _hidePastEvents = true;
+  String? _eventToExpandId;
+
+  @override
+  void initState() {
+    super.initState();
+    _eventToExpandId = widget.initialEventId;
+  }
+
+  @override
+  void didUpdateWidget(covariant EventsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialEventId != oldWidget.initialEventId) {
+      _eventToExpandId = widget.initialEventId;
+    }
+  }
 
   Future<void> _dispatchNotification(
     String notificationType,
@@ -79,15 +94,28 @@ class _EventsScreenState extends State<EventsScreen> {
         builder: (context, snapshot) {
           // Robust Error Handling as per SRS V3 section 5
           if (snapshot.hasError) {
-            return Center(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                color: Colors.red.shade100,
-                child: Text(
-                  'Error loading events: ${snapshot.error}',
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ),
+            return FutureBuilder<List<Map<String, dynamic>>>(
+              future: _supabase
+                  .from('events')
+                  .select()
+                  .order('event_date', ascending: true),
+              builder: (context, fallbackSnapshot) {
+                if (fallbackSnapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Unable to load events. Please refresh and try again.',
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
+                  );
+                }
+                if (!fallbackSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final events = fallbackSnapshot.data!
+                    .map((data) => EventModel.fromMap(data))
+                    .toList();
+                return _buildEventsView(events);
+              },
             );
           }
 
@@ -105,61 +133,64 @@ class _EventsScreenState extends State<EventsScreen> {
             );
           }
 
-          final today = DateTime.now();
-          final todayOnly = DateTime(today.year, today.month, today.day);
-          final visibleEvents = _hidePastEvents
-              ? events
-                    .where(
-                      (event) => !DateTime(
-                        event.eventDate.year,
-                        event.eventDate.month,
-                        event.eventDate.day,
-                      ).isBefore(todayOnly),
-                    )
-                    .toList()
-              : events;
-
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    const Text('Hide past events'),
-                    Switch(
-                      value: _hidePastEvents,
-                      onChanged: (value) =>
-                          setState(() => _hidePastEvents = value),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: visibleEvents.isEmpty
-                    ? Center(
-                        child: Text(
-                          _hidePastEvents
-                              ? 'No upcoming events or practices.'
-                              : 'No events or practices found.',
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: visibleEvents.length,
-                        itemBuilder: (context, index) => _buildEventCard(
-                          visibleEvents[index],
-                          autoExpand:
-                              visibleEvents[index].id == widget.initialEventId,
-                        ),
-                      ),
-              ),
-            ],
-          );
+          return _buildEventsView(events);
         },
       ),
+    );
+  }
+
+  Widget _buildEventsView(List<EventModel> events) {
+    if (events.isEmpty) {
+      return const Center(child: Text('No upcoming events or practices.'));
+    }
+
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final visibleEvents = _hidePastEvents
+        ? events
+              .where(
+                (event) => !DateTime(
+                  event.eventDate.year,
+                  event.eventDate.month,
+                  event.eventDate.day,
+                ).isBefore(todayOnly),
+              )
+              .toList()
+        : events;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              const Text('Hide past events'),
+              Switch(
+                value: _hidePastEvents,
+                onChanged: (value) => setState(() => _hidePastEvents = value),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: visibleEvents.isEmpty
+              ? Center(
+                  child: Text(
+                    _hidePastEvents
+                        ? 'No upcoming events or practices.'
+                        : 'No events or practices found.',
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: visibleEvents.length,
+                  itemBuilder: (context, index) => _buildEventCard(
+                    visibleEvents[index],
+                    autoExpand: visibleEvents[index].id == _eventToExpandId,
+                  ),
+                ),
+        ),
+      ],
     );
   }
 

@@ -78,6 +78,8 @@ Primary roles:
 - Added `20260914_notification_inbox_delivery_access.sql` and redeployed both notification senders so immediate and deadline deliveries insert inbox records through a server-only RPC instead of a direct RLS-blocked table write.
 - Applied `20260914_event_notification_access.sql` and redeployed the immediate sender with server-only event context and recipient access.
 - Applied `20260914_notifications_clear.sql` to allow members to clear only their own notification inbox records.
+- Applied `20260914_notifications_clear_privileges.sql` so the authenticated role has the table-level DELETE privilege required by the own-notifications RLS policy.
+- Applied `20260914_event_notification_context_date.sql` so notification delivery includes event dates and reactive event navigation has the required server context.
 
 ## Product TODOs
 

@@ -30,6 +30,8 @@ Apply these in the Supabase SQL Editor as the database owner, in this order:
 8. `20260914_notification_inbox_delivery_access.sql`
 9. `20260914_event_notification_access.sql`
 10. `20260914_notifications_clear.sql`
+11. `20260914_notifications_clear_privileges.sql`
+12. `20260914_event_notification_context_date.sql`
 
 All listed notification migrations have now been applied and the test push path has been verified.
 
@@ -37,9 +39,9 @@ The delivery-settings migration is applied; deployed senders read Admin notifica
 
 The inbox-delivery migration is required for deployed senders to insert unread inbox records through their server-only RPC. Apply it before testing event-triggered or scheduled inbox entries.
 
-The event-notification access migration is required for deployed senders to resolve event titles, RSVP member names, and server-side recipients without relying on direct table RLS reads.
+The event-notification access and event-date context migrations are applied, allowing deployed senders to resolve event titles, dates, RSVP member names, and server-side recipients without relying on direct table RLS reads.
 
-The notifications-clear migration is applied and allows a member to remove only their own inbox records.
+The notifications-clear migration and follow-up DELETE privilege migration are applied. Members can remove only their own inbox records through the RLS policy.
 
 Check the notification tables after applying the migrations:
 
