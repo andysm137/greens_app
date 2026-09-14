@@ -310,7 +310,7 @@ class _EventsScreenState extends State<EventsScreen> {
         foregroundColor: isSelected ? Colors.white : Colors.black87,
       ),
       onPressed: _canUpdateOwnRsvp(event)
-          ? () => _setOwnRsvp(event, status)
+          ? () => _handleOwnRsvpTap(event, status, currentStatus)
           : null,
       child: Text(status),
     );
@@ -335,9 +335,17 @@ class _EventsScreenState extends State<EventsScreen> {
   bool _canUpdateOwnRsvp(EventModel event) {
     if (_isPastEvent(event)) return false;
     if (widget.isLeaderOrAdmin) return true;
-    if (event.status == 'Go') return false;
+    // No-go locks RSVPs entirely; Go/past-deadline still allow moving to Yes,
+    // so those buttons stay enabled and are gated per-tap instead.
+    return event.status != 'No-go';
+  }
+
+  // Once an event is Go, or its response deadline has passed, a Member may
+  // still move to Attending but may no longer move away from it.
+  bool _isRsvpLockedToYes(EventModel event) {
+    if (event.status == 'Go') return true;
     final deadline = event.responseDeadline;
-    return deadline == null || !_isPastDate(deadline, DateTime.now());
+    return deadline != null && _isPastDate(deadline, DateTime.now());
   }
 
   Widget _buildMembersRsvpList(EventModel event) {
@@ -352,7 +360,56 @@ class _EventsScreenState extends State<EventsScreen> {
     );
   }
 
-  Future<void> _setOwnRsvp(EventModel event, String status) async {
+  Future<void> _handleOwnRsvpTap(
+    EventModel event,
+    String status,
+    String currentRsvp,
+  ) async {
+    final bool changingAwayFromYes =
+        currentRsvp == 'Attending' && status != 'Attending';
+    if (!widget.isLeaderOrAdmin &&
+        _isRsvpLockedToYes(event) &&
+        changingAwayFromYes) {
+      await _showRsvpLockedNotice();
+      return;
+    }
+    String? comment;
+    if (status == 'Maybe') {
+      comment = await _showCommentDialog(title: 'Maybe response');
+      if (!mounted || comment == null) return;
+    } else if (status == 'Not Attending' && changingAwayFromYes) {
+      comment = await _showCommentDialog(
+        title: 'Reason for changing to No',
+      );
+      if (!mounted || comment == null) return;
+    }
+    await _setOwnRsvp(event, status, comment: comment);
+  }
+
+  Future<void> _showRsvpLockedNotice() {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('RSVP locked'),
+        content: const Text(
+          'Please discuss this with a Leader who can change it for you - '
+          'Your attendance may effect the booking',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _setOwnRsvp(
+    EventModel event,
+    String status, {
+    String? comment,
+  }) async {
     final previous = await _supabase
         .from('event_rsvps')
         .select('rsvp_status')
@@ -360,11 +417,6 @@ class _EventsScreenState extends State<EventsScreen> {
         .eq('member_id', widget.currentMemberId)
         .maybeSingle();
     final oldStatus = previous?['rsvp_status']?.toString() ?? 'No Response';
-    String? comment;
-    if (status == 'Maybe') {
-      comment = await _showMaybeCommentDialog(context);
-      if (!mounted || comment == null) return;
-    }
     await _supabase.from('event_rsvps').upsert({
       'event_id': event.id,
       'member_id': widget.currentMemberId,
@@ -384,17 +436,17 @@ class _EventsScreenState extends State<EventsScreen> {
     setState(() {});
   }
 
-  Future<String?> _showMaybeCommentDialog(BuildContext context) async {
+  Future<String?> _showCommentDialog({required String title}) async {
     final controller = TextEditingController();
     final comment = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Maybe response'),
+        title: Text(title),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLines: 3,
-          decoration: const InputDecoration(labelText: 'Comment'),
+          decoration: const InputDecoration(labelText: 'We might already be counting on you!'),
         ),
         actions: [
           TextButton(
@@ -631,6 +683,70 @@ class _EventStatusCardState extends State<_EventStatusCard> {
   late bool _isExpanded = widget.initialExpanded;
 
   @override
+  void didUpdateWidget(covariant _EventStatusCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // ListView reuses this State across rebuilds, so a newly-arrived
+    // autoExpand request must be applied explicitly.
+    if (widget.initialExpanded && !oldWidget.initialExpanded) {
+      setState(() => _isExpanded = true);
+    }
+  }
+
+  Widget _buildStatusChip(EventModel event) {
+    final chipDecoration = BoxDecoration(
+      color: widget.statusColor.withValues(alpha: 0.2),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: widget.statusColor),
+    );
+    final chipTextStyle = TextStyle(
+      color: widget.statusColor,
+      fontWeight: FontWeight.bold,
+    );
+
+    if (!widget.isLeaderOrAdmin) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: chipDecoration,
+        child: Text(event.status, style: chipTextStyle),
+      );
+    }
+
+    const statuses = ['Pending', 'Go', 'No-go'];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: chipDecoration,
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: event.status,
+          isDense: true,
+          icon: Icon(
+            Icons.arrow_drop_down,
+            color: widget.statusColor,
+            size: 18,
+          ),
+          selectedItemBuilder: (context) => statuses
+              .map(
+                (status) => Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(event.status, style: chipTextStyle),
+                ),
+              )
+              .toList(),
+          items: statuses
+              .map(
+                (status) =>
+                    DropdownMenuItem(value: status, child: Text(status)),
+              )
+              .toList(),
+          onChanged: (status) {
+            if (status != null) widget.onStatusChanged(status);
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final event = widget.event;
     return Card(
@@ -670,24 +786,7 @@ class _EventStatusCardState extends State<_EventStatusCard> {
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: widget.statusColor.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: widget.statusColor),
-                      ),
-                      child: Text(
-                        event.status,
-                        style: TextStyle(
-                          color: widget.statusColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    _buildStatusChip(event),
                     const SizedBox(width: 8),
                     Icon(_isExpanded ? Icons.expand_less : Icons.expand_more),
                   ],
@@ -731,30 +830,6 @@ class _EventStatusCardState extends State<_EventStatusCard> {
                 const Divider(),
                 widget.rsvpSectionBuilder(),
                 widget.membersRsvpListBuilder(),
-                if (widget.isLeaderOrAdmin)
-                  Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        const Text('Booking Status: '),
-                        DropdownButton<String>(
-                          value: event.status,
-                          items: ['Pending', 'Go', 'No-go']
-                              .map(
-                                (status) => DropdownMenuItem(
-                                  value: status,
-                                  child: Text(status),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (status) {
-                            if (status != null) widget.onStatusChanged(status);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
                 if (widget.isAdmin)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),

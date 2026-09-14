@@ -90,8 +90,12 @@ Deno.serve(async (request) => {
         "get_push_subscriptions_for_delivery",
         { p_member_id: memberId },
       );
-      const body = setting.message_template?.trim() ||
-        `${event.title} needs your response in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}.`;
+      const sentAt = new Date().toLocaleString("en-GB", {
+        timeZone: "UTC",
+        hour12: false,
+      });
+      const body = `${setting.message_template?.trim() ||
+        `${event.title} needs your response in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}.`}\nSent: ${sentAt} UTC`;
       await client.rpc("insert_notification_for_delivery", {
         p_member_id: memberId,
         p_notification_type: "deadline_reminder",

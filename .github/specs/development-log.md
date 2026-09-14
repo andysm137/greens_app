@@ -1,6 +1,6 @@
 # Greens Development Breadcrumb
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 This file preserves the current implementation context for future development sessions. It records decisions and verified state, not every conversation detail.
 
@@ -80,6 +80,15 @@ Primary roles:
 - Applied `20260914_notifications_clear.sql` to allow members to clear only their own notification inbox records.
 - Applied `20260914_notifications_clear_privileges.sql` so the authenticated role has the table-level DELETE privilege required by the own-notifications RLS policy.
 - Applied `20260914_event_notification_context_date.sql` so notification delivery includes event dates and reactive event navigation has the required server context.
+- Added a realtime Postgres Changes subscription on `notifications` in `main_shell.dart` so the bell badge count updates live instead of only on menu actions.
+- Fixed `_EventStatusCardState` so a notification-driven auto-expand request is applied via `didUpdateWidget` even when `ListView` reuses an existing card's `State`.
+- Added `competency_updated` notifications: when a member changes their own Skill Matrix entry, Leaders/Admins are notified with the dance, position, and old/new proficiency level; added `20260914_competency_notification_setting.sql` for its default settings row.
+- Appended a `Sent: <date time> UTC` line to both `send-push-notification` and `send-deadline-reminders` delivered bodies.
+- Changed the deployed PWA icon references in `web/manifest.json` and `web/index.html` to `icons/Greens App icon.jpg` (favicon, apple-touch-icon, and all manifest icon entries).
+- Renamed the deployed PWA display name from `greens_app` to `Greens` in `web/manifest.json` (`name`/`short_name`) and `web/index.html` (`<title>`, `apple-mobile-web-app-title`).
+- Fixed the Events tab "sticky" auto-expand: `main_shell.dart` now clears `_pendingEventId` via `addPostFrameCallback` immediately after passing it to `EventsScreen` once, so returning to the tab later never re-expands a past notification's event.
+- Moved the Go/No-go/Pending status control into the colored header chip (`_buildStatusChip` in `_EventStatusCardState`), replacing the separate "Booking Status:" dropdown row; same options, callback, and Leader/Admin-only access.
+- Added Member RSVP guard rails in `events_screen.dart`: No-go locks RSVP changes entirely; Go/past-deadline still allow moving to Attending but block moving away from it with a "discuss with a Leader" popup; changing from Attending to Not Attending now always prompts for a reason (mirroring the existing Maybe comment prompt). Leaders/Admins are unaffected. Notification dispatch on RSVP change is unchanged.
 
 ## Product TODOs
 
@@ -118,9 +127,9 @@ Notifications:
 
 - [ ] Verify only Admins can manage notification settings while members can manage only their own subscriptions.
 - [ ] Verify notification settings disable delivery and message-template overrides appear in delivered notifications.
-- [ ] Add a scheduled deadline-reminder invocation with duplicate-send protection using the deployed sender function.
-- [ ] Apply `20260914_deadline_reminders.sql` and configure a daily Supabase scheduled invocation for `send-deadline-reminders` using Vault/cron-held service authorization.
-- [ ] Add a member-facing action to disable notifications on the current browser and remove its stored subscription.
+- [ ] Verify the daily `send-deadline-reminders-daily` Cron job (confirmed active, schedule `0 8 * * *`) actually delivers and dedupes across a real deadline date.
+- [ ] Verify `competency_updated` notifications end-to-end: self-edit by a Member, delivery to Leaders/Admins, inbox record, and realtime badge update.
+- [ ] Rebuild and redeploy the PWA (`flutter build web ...`) to confirm the new app name/icon take effect in the installed/home-screen PWA.
 
 Reliability and structure:
 
@@ -144,6 +153,10 @@ Flutter:
 - `lib/screens/admin_view.dart`: roster, profile editing, invitations, deletion, and catalog administration.
 - `lib/services/team_repository.dart`: current data access, still broad and due for feature-specific separation.
 - `lib/services/admin_auth_service.dart`: Edge Function calls for admin member operations.
+- `lib/services/notification_settings_repository.dart`: Admin notification settings CRUD and per-type test-send.
+- `lib/services/notification_subscription_service.dart`: browser push enable/disable for the current member.
+- `lib/services/notifications_repository.dart`: in-app notification inbox fetch/read/clear.
+- `lib/services/push_notifications.dart` (+ `_web.dart`/`_stub.dart`): browser push subscription bridge.
 - `lib/models/team_member.dart`: member profile and invitation status model.
 
 Supabase:
@@ -165,8 +178,15 @@ Supabase:
 - `supabase/functions/push-configuration/index.ts`: authenticated public VAPID-key endpoint.
 - `supabase/functions/send-push-notification/index.ts`: server-owned Web Push sender, settings enforcement, templates, and browser-subscription cleanup.
 - `supabase/functions/register-push-subscription/index.ts`: authenticated server-side browser subscription registration.
-- `supabase/functions/send-deadline-reminders/index.ts`: deployed deadline reminder sender with response filtering and duplicate claims.
-- `supabase/migrations/20260914_deadline_reminders.sql`: pending reminder delivery log and scheduler hand-off SQL.
+- `supabase/functions/send-deadline-reminders/index.ts`: deployed deadline reminder sender with response filtering, duplicate claims, and a sent timestamp; runs daily via Supabase Cron (`send-deadline-reminders-daily`, `0 8 * * *`) authenticated with a Vault-held `CRON_SECRET`.
+- `supabase/migrations/20260914_deadline_reminders.sql`: applied reminder delivery log (`notification_deliveries`) and scheduler hand-off notes.
+- `supabase/migrations/20260914_notifications_inbox.sql`: applied in-app `notifications` inbox table with member-owned read state.
+- `supabase/migrations/20260914_notification_delivery_settings.sql`: applied server-only `get_notification_setting_for_delivery` RPC.
+- `supabase/migrations/20260914_notification_inbox_delivery_access.sql`: applied server-only `insert_notification_for_delivery` RPC.
+- `supabase/migrations/20260914_event_notification_access.sql`: applied server-only event context/recipient RPCs (`get_event_notification_context`, `get_event_notification_recipients`).
+- `supabase/migrations/20260914_notifications_clear.sql` and `20260914_notifications_clear_privileges.sql`: applied member-owned inbox delete policy and its required table-level `DELETE` grant.
+- `supabase/migrations/20260914_event_notification_context_date.sql`: applied event date/time addition to notification context.
+- `supabase/migrations/20260914_competency_notification_setting.sql`: applied default settings row for `competency_updated`.
 - `.github/specs/notification-system-operations.md`: Admin, Leader, and Member notification configuration, deployment, testing, and troubleshooting guide.
 
 PWA deployment:

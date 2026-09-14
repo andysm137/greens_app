@@ -19,6 +19,7 @@ const standardMessages: Record<string, { title: string; body: string }> = {
   event_status_changed: { title: "Event status updated", body: "An event status has changed." },
   rsvp_changed: { title: "RSVP updated", body: "An RSVP response has changed." },
   event_details_changed: { title: "Event updated", body: "An event's details have changed." },
+  competency_updated: { title: "Competency updated", body: "A member updated their competency matrix." },
   test: { title: "Notifications enabled", body: "Silkstone Greens notifications are working on this browser." },
 };
 
@@ -51,6 +52,10 @@ Deno.serve(async (request) => {
   const memberId = typeof body.member_id === "string" ? body.member_id : "";
   const oldStatus = typeof body.old_status === "string" ? body.old_status : "No Response";
   const newStatus = typeof body.new_status === "string" ? body.new_status : "Updated";
+  const danceName = typeof body.dance_name === "string" ? body.dance_name : "";
+  const positionLabel = typeof body.position_label === "string" ? body.position_label : "";
+  const oldLevel = typeof body.old_level === "string" ? body.old_level : "-";
+  const newLevel = typeof body.new_level === "string" ? body.new_level : "-";
   let eventTitle = "";
   let eventDate = "";
   let memberName = "";
@@ -70,7 +75,7 @@ Deno.serve(async (request) => {
         .maybeSingle()).data
     : null);
   if (!caller) return json({ error: "Team profile not found" }, 403);
-  if (notificationType !== "test" && notificationType !== "rsvp_changed" && !caller.is_leader && !caller.is_admin) {
+  if (notificationType !== "test" && notificationType !== "rsvp_changed" && notificationType !== "competency_updated" && !caller.is_leader && !caller.is_admin) {
     return json({ error: "Leader or admin access required" }, 403);
   }
   if (notificationType === "test" && requestedTargetMemberId && caller.id !== requestedTargetMemberId) {
@@ -88,6 +93,13 @@ Deno.serve(async (request) => {
     eventTitle = context.event_title as string;
     eventDate = context.event_date as string;
     memberName = context.member_name as string || "";
+  } else if (memberId) {
+    const { data: memberRow } = await client
+      .from("team_members")
+      .select("full_name")
+      .eq("id", memberId)
+      .maybeSingle();
+    if (memberRow) memberName = memberRow.full_name as string;
   }
 
   const { data: settings, error: settingError } = notificationType === "test"
@@ -126,7 +138,15 @@ Deno.serve(async (request) => {
       ? `${memberName || "A member"} changed their RSVP for ${eventTitle || "the event"} (${eventDate ? eventDate.slice(0, 10) : "date unknown"}): From "${oldStatus}" to "${newStatus}"${changeDescription ? ` (${changeDescription})` : ""}.`
       : `${eventTitle || "Event"} (${eventDate ? eventDate.slice(0, 10) : "date unknown"}): ${changeDescription || message.body}`;
     notificationBody = `${notificationBody}\n${context}`;
+  } else if (notificationType === "competency_updated") {
+    const context = `${memberName || "A member"} updated their competency for ${danceName || "a dance"}${positionLabel ? ` (${positionLabel})` : ""}: From "${oldLevel}" to "${newLevel}".`;
+    notificationBody = `${notificationBody}\n${context}`;
   }
+  const sentAt = new Date().toLocaleString("en-GB", {
+    timeZone: "UTC",
+    hour12: false,
+  });
+  notificationBody = `${notificationBody}\nSent: ${sentAt} UTC`;
   const payload = JSON.stringify({
     title: message.title,
     body: notificationBody,
@@ -137,6 +157,13 @@ Deno.serve(async (request) => {
     const { data: recipients, error: recipientError } = await client.rpc(
       "get_event_notification_recipients",
       { p_leaders_only: notificationType === "rsvp_changed" },
+    );
+    if (recipientError) return json({ error: recipientError.message }, 400);
+    targetMemberIds = (recipients ?? []).map((recipient) => recipient.member_id as string);
+  } else if (notificationType === "competency_updated") {
+    const { data: recipients, error: recipientError } = await client.rpc(
+      "get_event_notification_recipients",
+      { p_leaders_only: true },
     );
     if (recipientError) return json({ error: recipientError.message }, 400);
     targetMemberIds = (recipients ?? []).map((recipient) => recipient.member_id as string);

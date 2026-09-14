@@ -29,6 +29,7 @@ class _MainShellState extends State<MainShell> {
   final NotificationsRepository _notificationsRepository =
       NotificationsRepository();
   int _unreadNotificationCount = 0;
+  RealtimeChannel? _notificationsChannel;
 
   bool get _isLeaderOrAdmin =>
       widget.currentMember.isLeader || widget.currentMember.isAdmin;
@@ -45,6 +46,27 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _refreshUnreadNotificationCount();
+    _notificationsChannel = Supabase.instance.client
+        .channel('notifications-${widget.currentMember.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notifications',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'member_id',
+            value: widget.currentMember.id,
+          ),
+          callback: (_) => _refreshUnreadNotificationCount(),
+        )
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    final channel = _notificationsChannel;
+    if (channel != null) Supabase.instance.client.removeChannel(channel);
+    super.dispose();
   }
 
   Future<void> _refreshUnreadNotificationCount() async {
@@ -333,11 +355,19 @@ class _MainShellState extends State<MainShell> {
   Widget _getSelectedWorkspaceWidget() {
     switch (_selectedIndex) {
       case 0:
+        final eventId = _pendingEventId;
+        if (eventId != null) {
+          // Consume the pending navigation once so returning to this tab
+          // later doesn't keep re-expanding the same event.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _pendingEventId = null);
+          });
+        }
         return EventsScreen(
           isLeaderOrAdmin: _isLeaderOrAdmin,
           isAdmin: widget.currentMember.isAdmin,
           currentMemberId: widget.currentMember.id,
-          initialEventId: _pendingEventId,
+          initialEventId: eventId,
         );
       case 1:
         return SkillsMatrixView(currentMember: widget.currentMember);

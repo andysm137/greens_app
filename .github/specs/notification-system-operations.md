@@ -32,12 +32,13 @@ Apply these in the Supabase SQL Editor as the database owner, in this order:
 10. `20260914_notifications_clear.sql`
 11. `20260914_notifications_clear_privileges.sql`
 12. `20260914_event_notification_context_date.sql`
+13. `20260914_competency_notification_setting.sql`
 
 All listed notification migrations have now been applied and the test push path has been verified.
 
 The delivery-settings migration is applied; deployed senders read Admin notification settings through the server-only RPC.
 
-The inbox-delivery migration is required for deployed senders to insert unread inbox records through their server-only RPC. Apply it before testing event-triggered or scheduled inbox entries.
+The inbox-delivery migration is applied; deployed senders insert unread inbox records through their server-only RPC for both immediate and scheduled deliveries.
 
 The event-notification access and event-date context migrations are applied, allowing deployed senders to resolve event titles, dates, RSVP member names, and server-side recipients without relying on direct table RLS reads.
 
@@ -227,6 +228,9 @@ Selecting a notification with an event reference marks it read and opens the Eve
 - `event_status_changed`: an event changes status, such as `Go` or `No-go`.
 - `rsvp_changed`: an RSVP response changes, including a Maybe comment where applicable.
 - `event_details_changed`: event date, location, description, or response deadline changes.
+- `competency_updated`: a member changes their own Skill Matrix competency; delivered to Leaders/Admins only, with the dance, position, and old/new proficiency level.
+
+All delivered notification bodies include a trailing `Sent: <date time> UTC` line.
 
 Immediate event dispatch is implemented. Scheduled deadline dispatch requires the daily cron job described above.
 

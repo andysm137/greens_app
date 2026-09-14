@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/team_member.dart';
 import '../models/competency.dart';
@@ -9,10 +10,8 @@ enum MatrixMode { byDancer, byDance }
 class SkillsMatrixView extends StatefulWidget {
   final TeamMember currentMember;
 
-  const SkillsMatrixView({
-    Key? key,
-    required this.currentMember,
-  }) : super(key: const Key('skills_matrix_view'));
+  const SkillsMatrixView({Key? key, required this.currentMember})
+    : super(key: const Key('skills_matrix_view'));
 
   @override
   State<SkillsMatrixView> createState() => _SkillsMatrixViewState();
@@ -70,7 +69,8 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
         };
 
         if (_members.isNotEmpty) {
-          _selectedMember = widget.currentMember.isLeader || widget.currentMember.isAdmin
+          _selectedMember =
+              widget.currentMember.isLeader || widget.currentMember.isAdmin
               ? _members.first
               : _members.firstWhere(
                   (member) => member.id == widget.currentMember.id,
@@ -101,7 +101,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
   bool _danceHasRole(String danceName, String role) {
     for (final dance in _danceCatalogDetails) {
       if (dance['dance_name'] == danceName) {
-        return role == 'MAF' ? dance['has_maf'] == true : dance['has_mab'] == true;
+        return role == 'MAF'
+            ? dance['has_maf'] == true
+            : dance['has_mab'] == true;
       }
     }
     return false;
@@ -109,8 +111,11 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
 
   /// Fetch competencies based on active matrix view mode
   Future<void> _refreshCompetencies() async {
-    final isMember = !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
-    if (!isMember && _currentMode == MatrixMode.byDance && _selectedDance != null) {
+    final isMember =
+        !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
+    if (!isMember &&
+        _currentMode == MatrixMode.byDance &&
+        _selectedDance != null) {
       final comps = await _teamRepository.fetchCompetenciesForDance(
         _selectedDance!,
       );
@@ -142,12 +147,56 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
         proficiencyLevel: newLevel,
       );
       await _refreshCompetencies();
+      if (memberId == widget.currentMember.id) {
+        await _dispatchCompetencyNotification(
+          danceName: danceName,
+          positionNumber: positionNumber,
+          oldLevel: currentLevel,
+          newLevel: newLevel,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to update proficiency: $e')),
         );
       }
+    }
+  }
+
+  String _positionLabel(int positionNumber) {
+    switch (positionNumber) {
+      case musicianPosition:
+        return 'Musician';
+      case mafPosition:
+        return 'MAF';
+      case mabPosition:
+        return 'MAB';
+      default:
+        return 'Position $positionNumber';
+    }
+  }
+
+  Future<void> _dispatchCompetencyNotification({
+    required String danceName,
+    required int positionNumber,
+    required String oldLevel,
+    required String newLevel,
+  }) async {
+    try {
+      await Supabase.instance.client.functions.invoke(
+        'send-push-notification',
+        body: {
+          'notification_type': 'competency_updated',
+          'member_id': widget.currentMember.id,
+          'dance_name': danceName,
+          'position_label': _positionLabel(positionNumber),
+          'old_level': oldLevel,
+          'new_level': newLevel,
+        },
+      );
+    } catch (_) {
+      // Notification delivery must not block a competency update.
     }
   }
 
@@ -203,7 +252,8 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     }
 
     final isCompact = MediaQuery.sizeOf(context).width < 600;
-    final isMember = !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
+    final isMember =
+        !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Skills Matrix')),
@@ -215,46 +265,46 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
             Padding(
               padding: EdgeInsets.symmetric(horizontal: isCompact ? 12 : 0),
               child: SegmentedButton<MatrixMode>(
-              segments: const [
-                ButtonSegment<MatrixMode>(
-                  value: MatrixMode.byDance,
-                  label: Text('By Dance'),
-                  icon: Icon(Icons.grid_on),
-                ),
-                ButtonSegment<MatrixMode>(
-                  value: MatrixMode.byDancer,
-                  label: Text('By Dancer'),
-                  icon: Icon(Icons.person),
-                ),
-              ],
-              selected: {isMember ? MatrixMode.byDancer : _currentMode},
-              expandedInsets: isCompact
-                  ? EdgeInsets.zero
-                  : const EdgeInsets.symmetric(horizontal: 24),
-              onSelectionChanged: (newSelection) async {
-                setState(() {
-                  _currentMode = newSelection.first;
-                });
-                await _refreshCompetencies();
-              },
+                segments: const [
+                  ButtonSegment<MatrixMode>(
+                    value: MatrixMode.byDance,
+                    label: Text('By Dance'),
+                    icon: Icon(Icons.grid_on),
+                  ),
+                  ButtonSegment<MatrixMode>(
+                    value: MatrixMode.byDancer,
+                    label: Text('By Dancer'),
+                    icon: Icon(Icons.person),
+                  ),
+                ],
+                selected: {isMember ? MatrixMode.byDancer : _currentMode},
+                expandedInsets: isCompact
+                    ? EdgeInsets.zero
+                    : const EdgeInsets.symmetric(horizontal: 24),
+                onSelectionChanged: (newSelection) async {
+                  setState(() {
+                    _currentMode = newSelection.first;
+                  });
+                  await _refreshCompetencies();
+                },
+              ),
             ),
-          ),
           const SizedBox(height: 12),
 
           // Dropdown Filter Selector Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: isMember || _currentMode == MatrixMode.byDancer
-              ? _buildDancerDropdown()
-              : _buildDanceDropdown(),
+                ? _buildDancerDropdown()
+                : _buildDanceDropdown(),
           ),
           const Divider(height: 24),
 
           // Active View Content Table
           Expanded(
             child: isMember || _currentMode == MatrixMode.byDancer
-              ? _buildByDancerTable()
-              : _buildByDanceTable(),
+                ? _buildByDancerTable()
+                : _buildByDanceTable(),
           ),
         ],
       ),
@@ -310,10 +360,11 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 500;
-        final isMember = !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
+        final isMember =
+            !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
         final selectableMembers = isMember
-          ? [_selectedMember ?? widget.currentMember]
-          : _members;
+            ? [_selectedMember ?? widget.currentMember]
+            : _members;
         final selector = DropdownButton<TeamMember>(
           value: _selectedMember,
           isExpanded: true,
@@ -443,14 +494,17 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView> {
                 if (isMusician) ...[
                   _buildDisabledCell(),
                   _buildDisabledCell(),
-                  ...List.generate(_selectedDancePositionCount, (_) => _buildDisabledCell()),
+                  ...List.generate(
+                    _selectedDancePositionCount,
+                    (_) => _buildDisabledCell(),
+                  ),
                 ] else ...[
                   hasMaf
-                    ? _buildCell(member.id, _selectedDance!, mafPosition)
-                    : _buildDisabledCell(),
+                      ? _buildCell(member.id, _selectedDance!, mafPosition)
+                      : _buildDisabledCell(),
                   hasMab
-                    ? _buildCell(member.id, _selectedDance!, mabPosition)
-                    : _buildDisabledCell(),
+                      ? _buildCell(member.id, _selectedDance!, mabPosition)
+                      : _buildDisabledCell(),
                   ...List.generate(
                     _selectedDancePositionCount,
                     (i) => _buildCell(member.id, _selectedDance!, i + 1),
