@@ -184,11 +184,12 @@ class _MainShellState extends State<MainShell> {
           child: Column(
             children: [
               ListTile(
-                title: const Text('Notifications'),
+                title: const Text('Notifications')
+                /*,
                 trailing: TextButton(
                   onPressed: () => Navigator.pop(context, 'actions'),
                   child: const Text('Actions'),
-                ),
+                ),*/
               ),
               Expanded(
                 child: notifications.isEmpty
