@@ -6,6 +6,7 @@ import 'package:greens_app/screens/admin_view.dart';
 import 'package:greens_app/screens/events_screen.dart';
 import 'package:greens_app/models/team_member.dart';
 
+import '../services/notification_subscription_service.dart';
 import 'skill_matrix_view.dart';
 import 'dance_builder_view.dart';
 import 'set_sheet_view.dart';
@@ -21,6 +22,8 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
+  final NotificationSubscriptionService _notificationSubscriptionService =
+      NotificationSubscriptionService();
 
   bool get _isLeaderOrAdmin =>
       widget.currentMember.isLeader || widget.currentMember.isAdmin;
@@ -52,6 +55,11 @@ class _MainShellState extends State<MainShell> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 IconButton(
+                  tooltip: 'Enable notifications',
+                  icon: const Icon(Icons.notifications_outlined),
+                  onPressed: _enableNotifications,
+                ),
+                IconButton(
                   tooltip: 'Sign out',
                   icon: const Icon(Icons.logout),
                   onPressed: () => Supabase.instance.client.auth.signOut(),
@@ -72,6 +80,27 @@ class _MainShellState extends State<MainShell> {
             ),
       bottomNavigationBar: isMobile ? _buildNavigationBar() : null,
     );
+  }
+
+  Future<void> _enableNotifications() async {
+    try {
+      await _notificationSubscriptionService.enableForMember(
+        widget.currentMember.id,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Notifications enabled for this browser.'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to enable notifications: $error')),
+        );
+      }
+    }
   }
 
   NavigationRail _buildNavigationRail() {

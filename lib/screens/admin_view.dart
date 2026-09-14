@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/team_member.dart';
 import '../services/admin_auth_service.dart';
+import '../services/notification_settings_repository.dart';
 import '../services/team_repository.dart';
 
 class AdminView extends StatefulWidget {
@@ -15,6 +16,8 @@ class _AdminViewState extends State<AdminView>
     with SingleTickerProviderStateMixin {
   final TeamRepository _teamRepository = TeamRepository();
   final AdminAuthService _adminAuthService = AdminAuthService();
+  final NotificationSettingsRepository _notificationSettingsRepository =
+      NotificationSettingsRepository();
   late TabController _tabController;
 
   bool _isLoading = true;
@@ -25,7 +28,7 @@ class _AdminViewState extends State<AdminView>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadAdminData();
   }
 
@@ -119,9 +122,9 @@ class _AdminViewState extends State<AdminView>
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_invitationErrorMessage(error))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_invitationErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -306,6 +309,7 @@ class _AdminViewState extends State<AdminView>
           tabs: const [
             Tab(icon: Icon(Icons.people), text: 'Team Roster'),
             Tab(icon: Icon(Icons.music_note), text: 'Dance Catalog'),
+            Tab(icon: Icon(Icons.notifications), text: 'Notifications'),
           ],
         ),
       ),
@@ -317,6 +321,8 @@ class _AdminViewState extends State<AdminView>
 
           // Tab 2: Dance Catalog Management
           _buildCatalogTab(),
+
+          _NotificationSettingsTab(repository: _notificationSettingsRepository),
         ],
       ),
     );
@@ -445,6 +451,215 @@ class _AdminViewState extends State<AdminView>
   }
 }
 
+class _NotificationSettingsTab extends StatefulWidget {
+  const _NotificationSettingsTab({required this.repository});
+
+  final NotificationSettingsRepository repository;
+
+  @override
+  State<_NotificationSettingsTab> createState() =>
+      _NotificationSettingsTabState();
+}
+
+class _NotificationSettingsTabState extends State<_NotificationSettingsTab> {
+  static const _definitions = <String, String>{
+    'event_created': 'New event created',
+    'deadline_reminder': 'Response deadline reminder',
+    'event_status_changed': 'Event marked Go or No-go',
+    'rsvp_changed': 'RSVP response changed',
+    'event_details_changed': 'Event details changed',
+  };
+
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _settings = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final settings = await widget.repository.fetchSettings();
+      if (mounted) setState(() => _settings = settings);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unable to load notification settings: $error'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Map<String, dynamic> _settingFor(String type) => _settings.firstWhere(
+    (setting) => setting['notification_type'] == type,
+    orElse: () => {
+      'notification_type': type,
+      'is_enabled': true,
+      'reminder_days': type == 'deadline_reminder' ? [3, 1] : <int>[],
+      'message_template': null,
+    },
+  );
+
+  Future<void> _editSetting(String type) async {
+    final setting = _settingFor(type);
+    final templateController = TextEditingController(
+      text: setting['message_template']?.toString() ?? '',
+    );
+    var enabled = setting['is_enabled'] as bool? ?? true;
+    var reminderDays = List<int>.from(setting['reminder_days'] as List? ?? []);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(_definitions[type]!),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enabled'),
+                  value: enabled,
+                  onChanged: (value) => setDialogState(() => enabled = value),
+                ),
+                if (type == 'deadline_reminder')
+                  TextFormField(
+                    initialValue: reminderDays.join(', '),
+                    decoration: const InputDecoration(
+                      labelText: 'Days before deadline',
+                      helperText:
+                          'Comma-separated whole days, for example 3, 1',
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (value) => reminderDays =
+                        value
+                            .split(',')
+                            .map((item) => int.tryParse(item.trim()))
+                            .whereType<int>()
+                            .where((day) => day >= 0)
+                            .toSet()
+                            .toList()
+                          ..sort((left, right) => right.compareTo(left)),
+                  ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: templateController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Message template override',
+                    hintText: 'Leave blank to use the standard message',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true) return;
+    try {
+      await widget.repository.saveSetting(
+        notificationType: type,
+        isEnabled: enabled,
+        reminderDays: reminderDays,
+        messageTemplate: templateController.text,
+      );
+      await _loadSettings();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unable to save notification setting: $error'),
+          ),
+        );
+      }
+    } finally {
+      templateController.dispose();
+    }
+  }
+
+  Future<void> _sendTest(String type) async {
+    try {
+      final result = await widget.repository.sendTest(type);
+      if (!mounted) return;
+      final disabled = result['disabled'] == true;
+      final delivered = result['delivered'] as int? ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            disabled
+                ? 'This notification is disabled, so no test was sent.'
+                : delivered > 0
+                ? 'Test notification sent to your subscribed browser.'
+                : 'No subscribed browser was found for this account.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to send test notification: $error')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    return ListView(
+      children: _definitions.entries.map((entry) {
+        final setting = _settingFor(entry.key);
+        final enabled = setting['is_enabled'] as bool? ?? true;
+        final reminderDays = List<int>.from(
+          setting['reminder_days'] as List? ?? [],
+        );
+        return ListTile(
+          leading: Icon(
+            enabled ? Icons.notifications_active : Icons.notifications_off,
+          ),
+          title: Text(entry.value),
+          subtitle: entry.key == 'deadline_reminder'
+              ? Text(
+                  reminderDays.isEmpty
+                      ? 'No reminders configured'
+                      : '${reminderDays.join(' and ')} days before deadline',
+                )
+              : Text(enabled ? 'Enabled' : 'Disabled'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'Send test to this browser',
+                icon: const Icon(Icons.send_outlined),
+                onPressed: () => _sendTest(entry.key),
+              ),
+              const Icon(Icons.tune),
+            ],
+          ),
+          onTap: () => _editSetting(entry.key),
+        );
+      }).toList(),
+    );
+  }
+}
+
 /// Dialog for Adding/Editing a Team Member with Musician Field Toggle
 class AddEditMemberDialog extends StatefulWidget {
   final TeamMember? member;
@@ -534,7 +749,9 @@ class _DanceCatalogDialogState extends State<DanceCatalogDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
               initialValue: _positions,
-              decoration: const InputDecoration(labelText: 'Standard positions'),
+              decoration: const InputDecoration(
+                labelText: 'Standard positions',
+              ),
               items: const [
                 DropdownMenuItem(value: 8, child: Text('8')),
                 DropdownMenuItem(
@@ -608,9 +825,7 @@ class _InviteMemberDialogState extends State<InviteMemberDialog> {
           : _phoneController.text.trim(),
       'is_admin': _isAdmin,
       'is_leader': _isLeader,
-      'instruments': _isMusician
-          ? _instrumentsController.text.trim()
-          : null,
+      'instruments': _isMusician ? _instrumentsController.text.trim() : null,
     });
   }
 

@@ -64,6 +64,12 @@ Primary roles:
 - Applied `20260913_harden_role_access.sql`, removing permissive public policies and enforcing member, leader, and admin access boundaries.
 - Applied `20260913_event_response_deadlines.sql`, adding event response deadlines, optional Maybe comments, and database-enforced RSVP cutoffs.
 - Applied `20260913_delete_booking_with_artifacts.sql`, providing Admin-only transactional event deletion with RSVP, lineup, settings, and legacy-layout cleanup.
+- Added the Admin Notifications tab and applied `20260914_web_push_notifications.sql` to store notification enablement, message-template overrides, deadline reminder days, and browser push subscriptions.
+- Added scoped browser push registration, an authenticated subscription action, deployed `push-configuration`/`send-push-notification` Edge Functions, and configured hosted VAPID secrets.
+- Deployed `register-push-subscription` so browser subscriptions are resolved and stored server-side, supporting legacy email-linked member profiles without weakening client RLS.
+- Applied `20260914_register_push_subscription.sql` to register browser subscriptions through a database-native, legacy-profile-aware RPC after direct RLS registration was rejected by Supabase.
+- Applied `20260914_push_delivery_access.sql` to give the deployed notification sender server-only access to subscription encryption keys and stale-subscription cleanup.
+- Verified end-to-end Web Push: browser permission, subscription registration, hosted VAPID configuration, and server-generated test delivery all succeeded.
 
 ## Product TODOs
 
@@ -97,6 +103,13 @@ Security and data integrity:
 - [ ] Restrict privileged Edge Function CORS responses to approved application origins.
 - [ ] Make invitation and member-deletion workflows transactional or add reliable reconciliation for partial failures.
 - [ ] Replace the implicit password-reset redirect with an allowlist of approved application URLs.
+
+Notifications:
+
+- [ ] Verify only Admins can manage notification settings while members can manage only their own subscriptions.
+- [ ] Verify notification settings disable delivery and message-template overrides appear in delivered notifications.
+- [ ] Add event-trigger dispatch and a scheduled deadline-reminder invocation using the deployed sender function.
+- [ ] Add a member-facing action to disable notifications on the current browser and remove its stored subscription.
 
 Reliability and structure:
 
@@ -135,6 +148,12 @@ Supabase:
 - `supabase/migrations/20260913_harden_role_access.sql`: applied role-based RLS cleanup for member, leader, and admin access.
 - `supabase/migrations/20260913_event_response_deadlines.sql`: applied deadline/comment columns and RSVP cutoff policy.
 - `supabase/migrations/20260913_delete_booking_with_artifacts.sql`: applied Admin-only transactional event deletion RPC.
+- `supabase/migrations/20260914_web_push_notifications.sql`: applied notification settings and browser push subscription tables.
+- `supabase/migrations/20260914_register_push_subscription.sql`: applied database-native browser subscription registration RPC.
+- `supabase/migrations/20260914_push_delivery_access.sql`: applied server-only subscription read/delete RPCs for notification delivery.
+- `supabase/functions/push-configuration/index.ts`: authenticated public VAPID-key endpoint.
+- `supabase/functions/send-push-notification/index.ts`: server-owned Web Push sender, settings enforcement, templates, and browser-subscription cleanup.
+- `supabase/functions/register-push-subscription/index.ts`: authenticated server-side browser subscription registration.
 
 PWA deployment:
 
@@ -227,17 +246,17 @@ For PWA deployment:
 7. Migrate or retire legacy `dance_assignments` data deliberately.
 8. Capture live constraints, foreign keys, triggers, and functions.
 9. Re-export the RLS policy snapshot and manually test member, leader, and admin boundaries.
-10. Replace the stale widget test and add repository/auth tests.
-11. Refactor the broad repository into feature-specific services.
-12. Decide whether to implement email OTP or magic-link login.
-13. Add the signed-in Change Password account action.
-14. Complete responsive layouts for Events, Dance Builder, and Admin.
-15. Continue with booking validation and Set Sheet.
-16. Retire legacy `booking_set_layouts` after data preservation and owner-level permission checks.
-17. Keep local web validation on the generated `build/web` directory, using `$webPath = (Resolve-Path .\build\web).Path` before starting `dhttpd`.
-18. Implement the Dance Builder and Set Sheet TODOs listed above, beginning with mobile layout and dancer-primary status styling.
-19. Address the Security and data integrity TODOs before expanding privileged administration features.
-20. Replace the generated widget test and then split the repository along feature boundaries.
+10. Verify Admin notification enablement, template override, and subscription ownership controls using the deployed test sender.
+11. Add event-trigger dispatch and scheduled deadline-reminder delivery with duplicate-send protection.
+12. Replace the stale widget test and add repository/auth, RLS, and notification coverage.
+13. Refactor the broad repository into feature-specific services.
+14. Decide whether to implement email OTP or magic-link login.
+15. Add the signed-in Change Password account action.
+16. Complete responsive layouts for Events, Dance Builder, and Admin.
+17. Continue with booking validation and Set Sheet.
+18. Retire legacy `booking_set_layouts` after data preservation and owner-level permission checks.
+19. Keep local web validation on the generated `build/web` directory, using `$webPath = (Resolve-Path .\build\web).Path` before starting `dhttpd`.
+20. Address the Security and data integrity TODOs before expanding privileged administration features.
 
 ## Session update rule
 
