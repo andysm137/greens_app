@@ -407,18 +407,18 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-            const DataColumn(
-              label: Text(
-                'Musician',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            DataColumn(label: _positionHeaderLabel('MAF', mafPosition)),
-            DataColumn(label: _positionHeaderLabel('MAB', mabPosition)),
             ...List.generate(
               _positionCount,
               (i) => DataColumn(
                 label: _positionHeaderLabel('Pos ${i + 1}', i + 1),
+              ),
+            ),
+            DataColumn(label: _positionHeaderLabel('MAF', mafPosition)),
+            DataColumn(label: _positionHeaderLabel('MAB', mabPosition)),
+            const DataColumn(
+              label: Text(
+                'Musician',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -432,9 +432,12 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                     style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
                 ),
-                isMusician
-                    ? _buildInfoCell(member.id, musicianPosition)
-                    : _buildDisabledCell(),
+                ...List.generate(
+                  _positionCount,
+                  (i) => isMusician
+                      ? _buildDisabledCell()
+                      : _buildAssignableCell(member.id, i + 1),
+                ),
                 if (!isMusician && _includeMaf)
                   _buildAssignableCell(member.id, mafPosition)
                 else
@@ -443,12 +446,9 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                   _buildAssignableCell(member.id, mabPosition)
                 else
                   _buildDisabledCell(),
-                ...List.generate(
-                  _positionCount,
-                  (i) => isMusician
-                      ? _buildDisabledCell()
-                      : _buildAssignableCell(member.id, i + 1),
-                ),
+                isMusician
+                    ? _buildInfoCell(member.id, musicianPosition)
+                    : _buildDisabledCell(),
               ],
             );
           }).toList(),
@@ -471,12 +471,6 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
             'Booking Skill Matrix',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Tap a qualified chip to make that dancer primary for the position '
-            'at this booking. Tap it again to clear it.',
-            style: TextStyle(fontSize: 12, color: Colors.black54),
-          ),
           const SizedBox(height: 12),
           Card(
             child: Padding(
@@ -488,9 +482,16 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                         ? _selectedEvent
                         : null,
                     isExpanded: true,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Event',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      isDense: compact,
+                      contentPadding: compact
+                          ? const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            )
+                          : null,
                     ),
                     items: _futureEvents
                         .map(
@@ -512,9 +513,16 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                   DropdownButtonFormField<String>(
                     initialValue: _selectedDance,
                     isExpanded: true,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Dance',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      isDense: compact,
+                      contentPadding: compact
+                          ? const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            )
+                          : null,
                     ),
                     items: _dances
                         .map(
@@ -532,10 +540,19 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                   ),
                   Wrap(
                     crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
+                    spacing: 4,
                     children: [
                       const Text('Positions'),
                       SegmentedButton<int>(
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity(
+                            horizontal: -4,
+                            vertical: -4,
+                          ),
+                          padding: WidgetStatePropertyAll(
+                            EdgeInsets.symmetric(horizontal: 6),
+                          ),
+                        ),
                         segments: const [
                           ButtonSegment(value: 8, label: Text('8')),
                           ButtonSegment(value: 12, label: Text('12')),
@@ -547,6 +564,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                         },
                       ),
                       Switch(
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         value: _includeMaf,
                         onChanged: (value) {
                           setState(() => _includeMaf = value);
@@ -555,6 +573,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                       ),
                       const Text('MAF'),
                       Switch(
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         value: _includeMab,
                         onChanged: (value) {
                           setState(() => _includeMab = value);

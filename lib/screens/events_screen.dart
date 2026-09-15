@@ -99,12 +99,22 @@ class _EventsScreenState extends State<EventsScreen>
       appBar: AppBar(
         title: const Text('Events & Practices'),
         actions: [
-          if (widget.isLeaderOrAdmin)
+          if (widget.isLeaderOrAdmin) ...[
+            const Text('Hide past', style: TextStyle(fontSize: 12)),
+            Transform.scale(
+              scale: 0.8,
+              child: Switch(
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                value: _hidePastEvents,
+                onChanged: (value) => setState(() => _hidePastEvents = value),
+              ),
+            ),
             IconButton(
               icon: const Icon(Icons.add),
               tooltip: 'Create Event',
               onPressed: () => _showCreateEventDialog(context),
             ),
+          ],
         ],
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
@@ -209,20 +219,6 @@ class _EventsScreenState extends State<EventsScreen>
           ),
           controller: _eventTypeController,
         ),
-        if (widget.isLeaderOrAdmin)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                const Text('Hide past events'),
-                Switch(
-                  value: _hidePastEvents,
-                  onChanged: (value) => setState(() => _hidePastEvents = value),
-                ),
-              ],
-            ),
-          ),
         Expanded(
           child: visibleEvents.isEmpty
               ? Center(
@@ -748,6 +744,10 @@ class _EventStatusCardState extends State<_EventStatusCard> {
   }
 
   Widget _buildStatusChip(EventModel event) {
+    final isCompact = MediaQuery.sizeOf(context).width < 600;
+    final horizontalPadding = isCompact ? 6.4 : 8.0;
+    final fontSize = isCompact ? 11.2 : 14.0;
+    final iconSize = isCompact ? 14.4 : 18.0;
     final chipDecoration = BoxDecoration(
       color: widget.statusColor.withValues(alpha: 0.2),
       borderRadius: BorderRadius.circular(8),
@@ -756,11 +756,15 @@ class _EventStatusCardState extends State<_EventStatusCard> {
     final chipTextStyle = TextStyle(
       color: widget.statusColor,
       fontWeight: FontWeight.bold,
+      fontSize: fontSize,
     );
 
     if (!widget.isLeaderOrAdmin) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: isCompact ? 3.2 : 4.0,
+        ),
         decoration: chipDecoration,
         child: Text(event.status, style: chipTextStyle),
       );
@@ -768,7 +772,10 @@ class _EventStatusCardState extends State<_EventStatusCard> {
 
     const statuses = ['Pending', 'Go', 'No-go'];
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding,
+        vertical: isCompact ? 1.6 : 2.0,
+      ),
       decoration: chipDecoration,
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -777,7 +784,7 @@ class _EventStatusCardState extends State<_EventStatusCard> {
           icon: Icon(
             Icons.arrow_drop_down,
             color: widget.statusColor,
-            size: 18,
+            size: iconSize,
           ),
           selectedItemBuilder: (context) => statuses
               .map(
@@ -789,8 +796,10 @@ class _EventStatusCardState extends State<_EventStatusCard> {
               .toList(),
           items: statuses
               .map(
-                (status) =>
-                    DropdownMenuItem(value: status, child: Text(status)),
+                (status) => DropdownMenuItem(
+                  value: status,
+                  child: Text(status, style: TextStyle(fontSize: fontSize)),
+                ),
               )
               .toList(),
           onChanged: (status) {

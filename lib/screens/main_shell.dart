@@ -89,60 +89,62 @@ class _MainShellState extends State<MainShell> {
       appBar: AppBar(
         title: Text('Silkstone Greens: ${_workspaceTitles[_selectedIndex]}'),
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Row(
-              children: [
-                Text(
-                  widget.currentMember.isAdmin
-                      ? 'Admin'
-                      : (widget.currentMember.isLeader ? 'Leader' : 'Member'),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    IconButton(
-                      tooltip: 'Notifications',
-                      icon: const Icon(Icons.notifications_outlined),
-                      onPressed: _showNotificationMenu,
-                    ),
-                    if (_unreadNotificationCount > 0)
-                      Positioned(
-                        right: 4,
-                        top: 2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            _unreadNotificationCount > 99
-                                ? '99+'
-                                : '$_unreadNotificationCount',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                children: [
+                  Text(
+                    widget.currentMember.isAdmin
+                        ? 'Admin'
+                        : (widget.currentMember.isLeader
+                              ? 'Leader'
+                              : 'Member'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      IconButton(
+                        tooltip: 'Notifications',
+                        icon: const Icon(Icons.notifications_outlined),
+                        onPressed: _showNotificationMenu,
+                      ),
+                      if (_unreadNotificationCount > 0)
+                        Positioned(
+                          right: 4,
+                          top: 2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              _unreadNotificationCount > 99
+                                  ? '99+'
+                                  : '$_unreadNotificationCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                IconButton(
-                  tooltip: 'Sign out',
-                  icon: const Icon(Icons.logout),
-                  onPressed: () => Supabase.instance.client.auth.signOut(),
-                ),
-              ],
+                    ],
+                  ),
+                  IconButton(
+                    tooltip: 'Sign out',
+                    icon: const Icon(Icons.logout),
+                    onPressed: () => Supabase.instance.client.auth.signOut(),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
       ), //AppBar
       body: isMobile
           ? _getSelectedWorkspaceWidget()
@@ -189,7 +191,7 @@ class _MainShellState extends State<MainShell> {
           child: Column(
             children: [
               ListTile(
-                title: const Text('Notifications')
+                title: const Text('Notifications'),
                 /*,
                 trailing: TextButton(
                   onPressed: () => Navigator.pop(context, 'actions'),
@@ -230,8 +232,7 @@ class _MainShellState extends State<MainShell> {
                                           ?.toString() ??
                                       '';
                                   final danceName =
-                                      notification['dance_name']
-                                          ?.toString() ??
+                                      notification['dance_name']?.toString() ??
                                       '';
                                   Navigator.pop(
                                     context,
@@ -313,9 +314,7 @@ class _MainShellState extends State<MainShell> {
     if (action?.startsWith('competency:') == true) {
       final parts = action!.substring('competency:'.length).split(':');
       final dancerId = parts.isNotEmpty ? parts[0] : '';
-      final danceName = parts.length > 1
-          ? Uri.decodeComponent(parts[1])
-          : '';
+      final danceName = parts.length > 1 ? Uri.decodeComponent(parts[1]) : '';
       if (dancerId.isNotEmpty) {
         setState(() {
           _pendingDancerId = dancerId;

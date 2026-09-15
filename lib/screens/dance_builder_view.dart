@@ -610,9 +610,16 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                         ? _selectedEvent
                         : null,
                     isExpanded: true,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Event',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      isDense: compact,
+                      contentPadding: compact
+                          ? const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            )
+                          : null,
                     ),
                     items: _visibleEvents
                         .map(
@@ -635,9 +642,16 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                   DropdownButtonFormField<String>(
                     initialValue: _selectedDance,
                     isExpanded: true,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Dance',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      isDense: compact,
+                      contentPadding: compact
+                          ? const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            )
+                          : null,
                     ),
                     items: _dances
                         .map(
@@ -663,10 +677,19 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                   ),
                   Wrap(
                     crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
+                    spacing: 4,
                     children: [
                       const Text('Positions'),
                       SegmentedButton<int>(
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity(
+                            horizontal: -4,
+                            vertical: -4,
+                          ),
+                          padding: WidgetStatePropertyAll(
+                            EdgeInsets.symmetric(horizontal: 6),
+                          ),
+                        ),
                         segments: const [
                           ButtonSegment(value: 8, label: Text('8')),
                           ButtonSegment(value: 12, label: Text('12')),
@@ -678,6 +701,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                         },
                       ),
                       Switch(
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         value: _includeMaf,
                         onChanged: (value) {
                           setState(() => _includeMaf = value);
@@ -686,6 +710,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                       ),
                       const Text('MAF'),
                       Switch(
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         value: _includeMab,
                         onChanged: (value) {
                           setState(() => _includeMab = value);

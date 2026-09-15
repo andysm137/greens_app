@@ -351,6 +351,10 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
             Padding(
               padding: EdgeInsets.symmetric(horizontal: isCompact ? 12 : 0),
               child: SegmentedButton<MatrixMode>(
+                style: SegmentedButton.styleFrom(
+                  visualDensity: const VisualDensity(vertical: -2),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                ),
                 segments: const [
                   ButtonSegment<MatrixMode>(
                     value: MatrixMode.byDance,
@@ -521,10 +525,13 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-            const DataColumn(
-              label: Text(
-                'Musician',
-                style: TextStyle(fontWeight: FontWeight.bold),
+            ...List.generate(
+              _selectedDancePositionCount,
+              (i) => DataColumn(
+                label: Text(
+                  'Pos ${i + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             const DataColumn(
@@ -533,13 +540,10 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
             const DataColumn(
               label: Text('MAB', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            ...List.generate(
-              _selectedDancePositionCount,
-              (i) => DataColumn(
-                label: Text(
-                  'Pos ${i + 1}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+            const DataColumn(
+              label: Text(
+                'Musician',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -577,32 +581,27 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                   ),
                 ),
 
-                // Column 2: Musician Position (0)
-                // Enabled only if member is a musician, disabled ('-') for dancers
-                if (isMusician)
-                  _buildCell(member.id, _selectedDance!, musicianPosition)
-                else
-                  _buildDisabledCell(),
-
                 // Positional Columns: Disabled for musicians, active for dancers
                 if (isMusician) ...[
-                  _buildDisabledCell(),
-                  _buildDisabledCell(),
                   ...List.generate(
                     _selectedDancePositionCount,
                     (_) => _buildDisabledCell(),
                   ),
+                  _buildDisabledCell(),
+                  _buildDisabledCell(),
+                  _buildCell(member.id, _selectedDance!, musicianPosition),
                 ] else ...[
+                  ...List.generate(
+                    _selectedDancePositionCount,
+                    (i) => _buildCell(member.id, _selectedDance!, i + 1),
+                  ),
                   hasMaf
                       ? _buildCell(member.id, _selectedDance!, mafPosition)
                       : _buildDisabledCell(),
                   hasMab
                       ? _buildCell(member.id, _selectedDance!, mabPosition)
                       : _buildDisabledCell(),
-                  ...List.generate(
-                    _selectedDancePositionCount,
-                    (i) => _buildCell(member.id, _selectedDance!, i + 1),
-                  ),
+                  _buildDisabledCell(),
                 ],
               ],
             );
@@ -637,10 +636,13 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-            const DataColumn(
-              label: Text(
-                'Musician',
-                style: TextStyle(fontWeight: FontWeight.bold),
+            ...List.generate(
+              12,
+              (i) => DataColumn(
+                label: Text(
+                  'Pos ${i + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             const DataColumn(
@@ -649,13 +651,10 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
             const DataColumn(
               label: Text('MAB', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            ...List.generate(
-              12,
-              (i) => DataColumn(
-                label: Text(
-                  'Pos ${i + 1}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+            const DataColumn(
+              label: Text(
+                'Musician',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -687,31 +686,26 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                   ),
                 ),
 
-                // Musician position cell (Pos 0)
-                // Active ONLY if the selected member is a musician
-                if (isMusician)
-                  _buildCell(_selectedMember!.id, dance, musicianPosition)
-                else
-                  _buildDisabledCell(),
-
                 // Positional Columns: Disabled if member is a musician, active for dancers
                 if (isMusician) ...[
-                  _buildDisabledCell(),
-                  _buildDisabledCell(),
                   ...List.generate(12, (_) => _buildDisabledCell()),
+                  _buildDisabledCell(),
+                  _buildDisabledCell(),
+                  _buildCell(_selectedMember!.id, dance, musicianPosition),
                 ] else ...[
-                  hasMaf
-                      ? _buildCell(_selectedMember!.id, dance, mafPosition)
-                      : _buildDisabledCell(),
-                  hasMab
-                      ? _buildCell(_selectedMember!.id, dance, mabPosition)
-                      : _buildDisabledCell(),
                   ...List.generate(
                     12,
                     (i) => i < dancePositionCount
                         ? _buildCell(_selectedMember!.id, dance, i + 1)
                         : _buildDisabledCell(),
                   ),
+                  hasMaf
+                      ? _buildCell(_selectedMember!.id, dance, mafPosition)
+                      : _buildDisabledCell(),
+                  hasMab
+                      ? _buildCell(_selectedMember!.id, dance, mabPosition)
+                      : _buildDisabledCell(),
+                  _buildDisabledCell(),
                 ],
               ],
             );

@@ -144,10 +144,14 @@ class _SetSheetViewState extends State<SetSheetView> {
             danceSettings?['standard_positions'] as int? ??
             catalog?['standard_positions'] as int? ??
             8;
-        final hasMaf =
-            danceSettings?['has_maf'] == true || catalog?['has_maf'] == true;
-        final hasMab =
-            danceSettings?['has_mab'] == true || catalog?['has_mab'] == true;
+        // A per-booking settings row always wins, even to turn MAF/MAB off;
+        // the catalog default only applies when no booking row exists at all.
+        final hasMaf = danceSettings != null
+            ? danceSettings['has_maf'] == true
+            : catalog?['has_maf'] == true;
+        final hasMab = danceSettings != null
+            ? danceSettings['has_mab'] == true
+            : catalog?['has_mab'] == true;
         final primaryIds = <int, String>{
           for (final assignment in danceAssignments)
             assignment['position_number'] as int: assignment['member_id']
@@ -256,7 +260,165 @@ class _SetSheetViewState extends State<SetSheetView> {
     }
   }
 
-  void _printSheet() => html.window.print();
+  // Opens a standalone HTML document in its own tab and lets that page
+  // trigger window.print() on itself once loaded. dart:html's WindowBase
+  // (returned by window.open) doesn't expose real property/method access
+  // via dynamic, so we can't drive the popup's document/print from here.
+  void _printSheet() {
+    final booking = _selectedBooking;
+    final sheet = _sheet;
+    if (booking == null || sheet == null) return;
+
+    final htmlContent = _buildPrintableHtml(booking, sheet);
+    final blob = html.Blob([htmlContent], 'text/html');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    html.window.open(url, '_blank');
+  }
+
+  String _escapeHtml(String value) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+
+  String _buildPrintableHtml(EventModel booking, Map<String, dynamic> sheet) {
+    final dances = (sheet['dances'] as Map<String, dynamic>?) ?? {};
+    final musicianInstruments = List<String>.from(
+      sheet['musicianInstruments'] as List? ?? const [],
+    );
+    final musicians = List<String>.from(sheet['musicians'] as List? ?? const []);
+    final attendingDancers = List<String>.from(
+      sheet['attendingDancers'] as List? ?? const [],
+    );
+    final displayMusicians = musicianInstruments.isEmpty
+        ? musicians
+        : musicianInstruments;
+
+    final entries = dances.entries.toList()
+      ..sort(
+        (left, right) =>
+            left.key.toLowerCase().compareTo(right.key.toLowerCase()),
+      );
+    final compliant = entries
+        .where((entry) => (entry.value as Map)['compliant'] == true)
+        .toList();
+    final nonCompliant = entries
+        .where((entry) => (entry.value as Map)['compliant'] != true)
+        .toList();
+
+    final danceHtml = StringBuffer();
+    if (compliant.isNotEmpty) {
+      danceHtml.write('<h2>Enough dancers to perform</h2>');
+      for (final entry in compliant) {
+        danceHtml.write(_renderPrintableDance(entry));
+      }
+    }
+    if (nonCompliant.isNotEmpty) {
+      danceHtml.write('<h2>Not enough dancers to perform</h2>');
+      for (final entry in nonCompliant) {
+        danceHtml.write(_renderPrintableDance(entry));
+      }
+    }
+
+    return '''
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${_escapeHtml(booking.title)} - Set Sheet</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; padding: 16px; color: #111; }
+  h1 { margin-bottom: 4px; }
+  h2 { margin-top: 24px; }
+  .dance { padding: 12px; margin-bottom: 12px; border-radius: 6px; page-break-inside: avoid; }
+  .header { margin-bottom: 16px; }
+  .positions { border-collapse: collapse; width: 100%; margin-bottom: 4px; }
+  .positions td { border: 1px solid #ccc; padding: 4px 8px; font-size: 13px; }
+  .pos-label { width: 32px; font-weight: bold; text-align: center; }
+  .special-wrap { text-align: center; margin-bottom: 4px; }
+  .special-row { display: inline-table; border-collapse: collapse; min-width: 220px; }
+  .special-row td { border: 1px solid #ccc; padding: 4px 8px; font-size: 13px; }
+</style>
+<script>
+  window.addEventListener('load', function () { window.print(); });
+  window.addEventListener('afterprint', function () { window.close(); });
+</script>
+</head>
+<body>
+  <div class="header">
+    <h1>${_escapeHtml(booking.title)}</h1>
+    <div>${_escapeHtml(booking.eventType)} - ${_formatDate(booking.eventDate)}</div>
+    <div>Attending members: ${sheet['attendingCount'] ?? 0}</div>
+    <div><strong>Attending dancers:</strong> ${attendingDancers.isEmpty ? 'None' : _escapeHtml(attendingDancers.join(', '))}</div>
+    <div><strong>Musicians:</strong> ${displayMusicians.isEmpty ? 'None' : _escapeHtml(displayMusicians.join(', '))}</div>
+  </div>
+  $danceHtml
+</body>
+</html>
+''';
+  }
+
+  String _renderPrintableDance(MapEntry<String, dynamic> entry) {
+    final data = entry.value as Map<String, dynamic>;
+    final candidates = Map<int, List<Map<String, dynamic>>>.from(
+      data['candidates'] as Map,
+    );
+    final primaryIds = Map<int, String>.from(data['primaryIds'] as Map);
+    final positionCount = data['positionCount'] as int? ?? 8;
+    final hasMaf = data['hasMaf'] == true;
+    final hasMab = data['hasMab'] == true;
+    final compliant = data['compliant'] == true;
+    final background = compliant ? '#e8f5e9' : '#ffebee';
+
+    String namesFor(int position) {
+      final list = candidates[position] ?? const [];
+      final primaryId = primaryIds[position];
+      if (list.isEmpty) return '<em>Unassigned</em>';
+      return list
+          .map((candidate) {
+            final isPrimary = candidate['id'] == primaryId;
+            final name = _escapeHtml(candidate['name'] as String);
+            return isPrimary ? '<strong>$name</strong>' : name;
+          })
+          .join(', ');
+    }
+
+    String specialRow(int position, String label) {
+      return '''
+        <div class="special-wrap">
+          <table class="special-row"><tr>
+            <td class="pos-label">$label</td>
+            <td>${namesFor(position)}</td>
+          </tr></table>
+        </div>
+      ''';
+    }
+
+    final pairRows = StringBuffer();
+    for (var position = 1; position <= positionCount; position += 2) {
+      final second = position + 1;
+      pairRows.write('<tr>');
+      pairRows.write(
+        '<td class="pos-label">$position</td><td>${namesFor(position)}</td>',
+      );
+      if (second <= positionCount) {
+        pairRows.write(
+          '<td class="pos-label">$second</td><td>${namesFor(second)}</td>',
+        );
+      } else {
+        pairRows.write('<td></td><td></td>');
+      }
+      pairRows.write('</tr>');
+    }
+
+    return '''
+      <div class="dance" style="background:$background;">
+        <h3>${_escapeHtml(entry.key)}</h3>
+        ${hasMaf ? specialRow(99, 'MAF') : ''}
+        <table class="positions">$pairRows</table>
+        ${hasMab ? specialRow(98, 'MAB') : ''}
+      </div>
+    ''';
+  }
 
   int _competentPositionCount(
     List<Map<String, dynamic>> competencies,
@@ -406,8 +568,8 @@ class _SetSheetViewState extends State<SetSheetView> {
               await _loadSheet();
             },
           ),
+          const SizedBox(height: 16),
           if (booking != null) ...[
-            const SizedBox(height: 16),
             _buildBookingHeader(
               booking,
               attendingDancers,
@@ -423,16 +585,45 @@ class _SetSheetViewState extends State<SetSheetView> {
                   ),
                 ),
               ),
-            ...dances.entries.map(
-              (entry) => _buildDanceBlock(
-                entry.key,
-                entry.value as Map<String, dynamic>,
-              ),
-            ),
+            ..._buildGroupedDanceBlocks(dances),
           ],
         ],
       ),
     );
+  }
+
+  List<Widget> _buildGroupedDanceBlocks(Map<String, dynamic> dances) {
+    final entries = dances.entries.toList()
+      ..sort((left, right) => left.key.toLowerCase().compareTo(right.key.toLowerCase()));
+    final compliantEntries = entries
+        .where((entry) => (entry.value as Map<String, dynamic>)['compliant'] == true)
+        .toList();
+    final nonCompliantEntries = entries
+        .where((entry) => (entry.value as Map<String, dynamic>)['compliant'] != true)
+        .toList();
+
+    Widget sectionHeading(String label) => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(label, style: Theme.of(context).textTheme.titleMedium),
+    );
+
+    return [
+      if (compliantEntries.isNotEmpty) ...[
+        sectionHeading('Enough dancers to perform'),
+        ...compliantEntries.map(
+          (entry) =>
+              _buildDanceBlock(entry.key, entry.value as Map<String, dynamic>),
+        ),
+        const SizedBox(height: 8),
+      ],
+      if (nonCompliantEntries.isNotEmpty) ...[
+        sectionHeading('Not enough dancers to perform'),
+        ...nonCompliantEntries.map(
+          (entry) =>
+              _buildDanceBlock(entry.key, entry.value as Map<String, dynamic>),
+        ),
+      ],
+    ];
   }
 
   Widget _buildBookingHeader(
@@ -500,8 +691,8 @@ class _SetSheetViewState extends State<SetSheetView> {
     }
 
     return Card(
-      color: compliant ? null : Colors.grey.shade300,
-      surfaceTintColor: compliant ? null : Colors.grey.shade300,
+      color: compliant ? Colors.green.shade50 : Colors.red.shade50,
+      surfaceTintColor: Colors.transparent,
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -510,8 +701,7 @@ class _SetSheetViewState extends State<SetSheetView> {
           children: [
             Text(
               danceName,
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(color: compliant ? null : Colors.grey.shade700),
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             if (hasMaf)
               Center(
