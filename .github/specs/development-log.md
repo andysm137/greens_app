@@ -122,6 +122,109 @@ Primary roles:
 - Added `supabase/functions/deno.json` so Supabase Edge Functions are recognized as Deno projects by the Deno-aware editor tooling; explicitly typed the notification sender request and recipient rows. The generic workspace diagnostics may still report unresolved `Deno`/URL imports unless the VS Code Deno extension is enabled for `supabase/functions`.
 - Added Booking/Practice tabs to Events with date sorting and notification-linked event tab selection; members retain hidden past events without seeing the switch; bolded RSVP group headings; sorted the Admin dance catalog alphabetically; added the Competency notification setting; tightened Skill Matrix chips; and moved the Dance Builder past-event switch to the title row.
 - Sorted dance names case-insensitively in shared catalog results and all remaining Builder/Set Sheet collections, and constrained Skill Matrix chips to 32px inside fixed 48px rows so visible gaps remain above and below the chips.
+- Gemini code refeactor on event_screen
+  I can help you review, fix, and optimize your code! I can write Flutter/Dart code, explain step-by-step logic, assist in debugging runtime errors, and optimize database queries or UI performance.
+
+Here is an analysis of your EventsScreen file, focusing on logic errors, performance bottlenecks, and potential runtime crashes.
+
+Overview of Findings
+Unnecessary DB Fetching inside build(): In _buildRsvpSection(), Future.wait runs Supabase queries directly inside a FutureBuilder without caching the Future. Every time setState() is called (e.g., expanding/collapsing a card), those database queries fire again.
+
+Stream N+1 Problem: Every _EventStatusCard renders _StableMembersRsvpList, which spawns 3 nested streams per expanded card. Opening multiple event cards creates dozens of active web socket listeners simultaneously.
+
+Data Mutation in build() Side-Effects: In _buildEventsView(), a WidgetsBinding.instance.addPostFrameCallback triggers setState() inside a render cycle. This causes extra frame renders and flickering.
+
+Time Zone & Date Normalization Bugs: _isPastDate() compares years, months, and days directly using DateTime.now(), which can lead to off-by-one errors when users are in different time zones.
+
+Memory Leak Risk in Dialogs: _showCreateEventDialog creates multiple TextEditingController instances that are never disposed of when the dialog closes.
+
+Key Issues & Performance Analysis
+1. Database Re-Queries in _buildRsvpSection
+Issue: The Future.wait call is instantiated directly inside FutureBuilder(future: ...) without being initialized in initState() or cached.
+
+Impact: Re-executes full database queries on every widget rebuild or frame update.
+
+Fix: Move the query execution into an explicit StatefulWidget or cache the Future.
+
+2. Stream Overhead in _StableMembersRsvpList
+Issue: The sub-widget creates three new Stream instances in initState():
+
+Dart
+_membersStream = widget.supabase.from('team_members').stream(...);
+_musicianProfilesStream = widget.supabase.from('musician_profiles').stream(...);
+_rsvpStream = widget.supabase.from('event_rsvps').stream(...);
+Impact: If you have 10 events expanded, you maintain 30 open realtime streams to Supabase, which triggers severe rate limits and battery drain.
+
+Fix: Share global streams or query child RSVP data through relational Supabase selects (select('*, event_rsvps(*)')).
+
+3. Un-Disposed Controllers in _showCreateEventDialog
+Issue: titleController, locationController, and descriptionController are instantiated inside a method without dispose() calls.
+
+Impact: Causes progressive memory leaks.
+
+Fix: Convert the dialog to a StatefulWidget or handle controller lifecycle disposal explicitly.
+
+Refactored Solution & Implementation
+Here is the optimized code fixing the memory leaks, state-mutation side effects, and re-fetching issues:
+Solution Overview
+We will update your Flutter code in lib/views/events_screen.dart to fulfill all four requirements:
+
+Reorder the Tabs: Put "Practices" first (on the left) and "Bookings" second (on the right).
+
+Reset Expanded Events on Tab Switch: Clear _eventToExpandId whenever the user switches tabs so no events start expanded in the new tab.
+
+Reset Deep-Linked Notifications: When an event is toggled closed, reset _eventToExpandId so the notification-directed expansion is forgotten.
+
+Display Musician & Dancer Counts on Unexpanded Event Items: Fetch attendance counts and show a summary chip on the unexpanded card header for Leaders and Admins.
+
+Key Technical Details
+Tab Listener: We attach a listener to _eventTypeController in initState() so changing tabs resets _eventToExpandId = null.
+
+Asynchronous Count Summary: We add a lightweight FutureBuilder or query within _EventStatusCard to count attending Dancers and Musicians and display them on the card header when collapsed.
+
+Toggling Expansion: Toggling an expanded card explicitly resets _eventToExpandId = null to clear the notification deep-link state.
+
+Overview of Solution
+Here is a breakdown of why these two issues are occurring and how we can fix them cleanly:
+
+Events remaining expanded when switching tabs:
+
+Root Cause: Right now, each event card (_EventStatusCard) relies on its own internal state (_isExpanded) initialized via widget.initialExpanded. Changing tabs triggers a rebuilt list of events, but the internal state inside existing card instances persists or defaults to whatever local state they had.
+
+Fix: We can track the single currently expanded event ID directly inside the parent _EventsScreenState (e.g., using a variable named _expandedEventId). When switching tabs in _handleTabSelection, setting _expandedEventId = null ensures all events instantly collapse.
+
+Notifications/Deep-links not switching to the correct tab:
+
+Root Cause: When the screen opens via a notification, _selectedEventType defaults to 'Practice', and the TabController index remains at 0. If the targeted notification event is actually a 'Booking', the event gets filtered out of visibleEvents, preventing it from expanding or displaying.
+
+Fix: In initState (and didUpdateWidget), when an initialEventId is passed in, we fetch/locate that event from our events stream or state to determine its eventType. If it is a 'Booking', we programmatically switch _eventTypeController.index = 1 and update _selectedEventType = 'Booking'.
+
+Solution OverviewHere is the updated implementation for lib/screens/main_shell.dart.  Key Changes:Removed Post-Frame Callback State Clearing in _getSelectedWorkspaceWidget: The premature clearing of _pendingEventId and _pendingDancerId immediately after widget build caused child views (EventsScreen and SkillsMatrixView) to lose target arguments during stream updates or re-renders.  Added Unique Value Keys: Added dynamic ValueKey instances (ValueKey('events_screen_${_pendingEventId ?? 'default'}')) to ensure Flutter rebuilds and injects new parameter props cleanly when a notification action arrives.  Reset Pending State on Manual Workspace Switches: Explicitly reset all _pending... parameters inside _selectWorkspace so manual navigation resets target locks.  
+
+When a notification arrives, two separate parts of the app need to coordinate:
+
+MainShell needs to hold onto the pendingEventId long enough for the target screen to load.
+
+EventsScreen needs to switch its internal tab (Practices vs. Bookings) to match the target event before filtering its list, and then expand the event card.
+
+If EventsScreen resets its tab or clears its target parameter during a stream rebuild or tab transition animation, the card won't open.
+
+Overview of the Complete Fix
+To solve this completely, we need to ensure coordination between MainShell and EventsScreen:
+
+In MainShell: Keep passing initialEventId via a unique ValueKey (as updated above) so EventsScreen re-initializes properly when a notification is clicked.
+
+In EventsScreen:
+
+Detect when initialEventId changes or is passed on launch.
+
+Look up the event in the data stream to determine if it is a Practice or a Booking.
+
+Switch the internal TabController to match the event's type so it isn't filtered out by _selectedEventType.
+
+Set _expandedEventId to the target ID so the card opens automatically.
+
+To ensure clicking a notification accurately opens the target event card regardless of which tab ("Practices" or "Bookings") it belongs to, we must avoid state race conditions during data stream updates.  Explicit Tab Synchronization (_syncTabWithTargetEvent): Instead of relying on passive rebuilds, we check incoming stream items against _expandedEventId. If the target event is located, the tab controller switches via _eventTypeController.animateTo(...) and updates _selectedEventType.  Post-Frame Callback Guarding: We wrap tab transitions inside WidgetsBinding.instance.addPostFrameCallback. This prevents triggering setState while Flutter is in the middle of a build frame.  Safe Widget Updates (didUpdateWidget): When initialEventId or highlightMemberId are updated via MainShell, the state catches the change and re-enables target expansion.  
 
 ## Product TODOs
 
@@ -325,6 +428,9 @@ For PWA deployment:
 18. Retire legacy `booking_set_layouts` after data preservation and owner-level permission checks.
 19. Keep local web validation on the generated `build/web` directory, using `$webPath = (Resolve-Path .\build\web).Path` before starting `dhttpd`.
 20. Address the Security and data integrity TODOs before expanding privileged administration features.
+
+
+
 
 ## Session update rule
 

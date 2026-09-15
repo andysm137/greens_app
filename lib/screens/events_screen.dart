@@ -30,20 +30,36 @@ class _EventsScreenState extends State<EventsScreen>
   final SupabaseClient _supabase = Supabase.instance.client;
   late final TabController _eventTypeController;
   bool _hidePastEvents = true;
-  String _selectedEventType = 'Booking';
-  String? _eventToExpandId;
+
+  String _selectedEventType = 'Practice';
+  String? _expandedEventId;
   String? _memberToHighlightId;
 
   @override
   void initState() {
     super.initState();
     _eventTypeController = TabController(length: 2, vsync: this);
-    _eventToExpandId = widget.initialEventId;
+    _expandedEventId = widget.initialEventId;
     _memberToHighlightId = widget.highlightMemberId;
+
+    _eventTypeController.addListener(_handleTabSelection);
+  }
+
+  void _handleTabSelection() {
+    if (_eventTypeController.indexIsChanging) {
+      setState(() {
+        _selectedEventType =
+            _eventTypeController.index == 0 ? 'Practice' : 'Booking';
+        // Un-expand all events upon manually changing tabs
+        _expandedEventId = null;
+        _memberToHighlightId = null;
+      });
+    }
   }
 
   @override
   void dispose() {
+    _eventTypeController.removeListener(_handleTabSelection);
     _eventTypeController.dispose();
     super.dispose();
   }
@@ -51,15 +67,41 @@ class _EventsScreenState extends State<EventsScreen>
   @override
   void didUpdateWidget(covariant EventsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Only latch a genuinely new target; ignore the parent's later null
-    // reset so an in-flight events fetch still finds it once it resolves.
     if (widget.initialEventId != null &&
         widget.initialEventId != oldWidget.initialEventId) {
-      _eventToExpandId = widget.initialEventId;
+      setState(() {
+        _expandedEventId = widget.initialEventId;
+      });
     }
     if (widget.highlightMemberId != null &&
         widget.highlightMemberId != oldWidget.highlightMemberId) {
-      _memberToHighlightId = widget.highlightMemberId;
+      setState(() {
+        _memberToHighlightId = widget.highlightMemberId;
+      });
+    }
+  }
+
+  // Auto-switch tab to match the target notification event type
+  void _syncTabWithTargetEvent(List<EventModel> events) {
+    if (_expandedEventId == null) return;
+
+    final targetEvent = events.cast<EventModel?>().firstWhere(
+          (e) => e?.id == _expandedEventId,
+          orElse: () => null,
+        );
+
+    if (targetEvent != null) {
+      final targetIndex = targetEvent.eventType == 'Booking' ? 1 : 0;
+      if (_eventTypeController.index != targetIndex) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _eventTypeController.index != targetIndex) {
+            _eventTypeController.animateTo(targetIndex);
+            setState(() {
+              _selectedEventType = targetEvent.eventType;
+            });
+          }
+        });
+      }
     }
   }
 
@@ -123,7 +165,6 @@ class _EventsScreenState extends State<EventsScreen>
             .stream(primaryKey: ['id'])
             .order('event_date', ascending: true),
         builder: (context, snapshot) {
-          // Robust Error Handling as per SRS V3 section 5
           if (snapshot.hasError) {
             return FutureBuilder<List<Map<String, dynamic>>>(
               future: _supabase
@@ -145,6 +186,8 @@ class _EventsScreenState extends State<EventsScreen>
                 final events = fallbackSnapshot.data!
                     .map((data) => EventModel.fromMap(data))
                     .toList();
+
+                _syncTabWithTargetEvent(events);
                 return _buildEventsView(events);
               },
             );
@@ -164,6 +207,7 @@ class _EventsScreenState extends State<EventsScreen>
             );
           }
 
+          _syncTabWithTargetEvent(events);
           return _buildEventsView(events);
         },
       ),
@@ -177,21 +221,7 @@ class _EventsScreenState extends State<EventsScreen>
 
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
-    final linkedEvent = _eventToExpandId == null
-        ? null
-        : events.where((event) => event.id == _eventToExpandId).firstOrNull;
-    if (linkedEvent != null && linkedEvent.eventType != _selectedEventType) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _selectedEventType != linkedEvent.eventType) {
-          setState(() {
-            _selectedEventType = linkedEvent.eventType;
-            _eventTypeController.animateTo(
-              linkedEvent.eventType == 'Booking' ? 0 : 1,
-            );
-          });
-        }
-      });
-    }
+
     final typeEvents =
         events.where((event) => event.eventType == _selectedEventType).toList()
           ..sort((left, right) => left.eventDate.compareTo(right.eventDate));
@@ -210,14 +240,11 @@ class _EventsScreenState extends State<EventsScreen>
     return Column(
       children: [
         TabBar(
-          tabs: const [
-            Tab(text: 'Bookings'),
-            Tab(text: 'Practices'),
-          ],
-          onTap: (index) => setState(
-            () => _selectedEventType = index == 0 ? 'Booking' : 'Practice',
-          ),
           controller: _eventTypeController,
+          tabs: const [
+            Tab(text: 'Practices'),
+            Tab(text: 'Bookings'),
+          ],
         ),
         Expanded(
           child: visibleEvents.isEmpty
@@ -230,183 +257,49 @@ class _EventsScreenState extends State<EventsScreen>
                 )
               : ListView.builder(
                   itemCount: visibleEvents.length,
-                  itemBuilder: (context, index) => _buildEventCard(
-                    visibleEvents[index],
-                    autoExpand: visibleEvents[index].id == _eventToExpandId,
-                  ),
+                  itemBuilder: (context, index) {
+                    final event = visibleEvents[index];
+                    final isExpanded = event.id == _expandedEventId;
+
+                    return _EventStatusCard(
+                      key: ValueKey(event.id),
+                      rowColor: switch (event.status) {
+                        'Go' => Colors.green.shade50,
+                        'No-go' => Colors.red.shade50,
+                        _ => Colors.yellow.shade50,
+                      },
+                      statusColor: switch (event.status) {
+                        'Go' => Colors.green,
+                        'No-go' => Colors.red,
+                        _ => Colors.orange,
+                      },
+                      event: event,
+                      isLeaderOrAdmin: widget.isLeaderOrAdmin,
+                      isAdmin: widget.isAdmin,
+                      currentMemberId: widget.currentMemberId,
+                      supabase: _supabase,
+                      onStatusChanged: (status) =>
+                          _updateEventStatus(event.id, status),
+                      onDeleteEvent: () => _deleteEvent(event),
+                      onHandleOwnRsvpTap: _handleOwnRsvpTap,
+                      highlightMemberId:
+                          isExpanded ? _memberToHighlightId : null,
+                      isExpanded: isExpanded,
+                      onToggleExpanded: () {
+                        setState(() {
+                          if (isExpanded) {
+                            _expandedEventId = null;
+                            _memberToHighlightId = null;
+                          } else {
+                            _expandedEventId = event.id;
+                          }
+                        });
+                      },
+                    );
+                  },
                 ),
         ),
       ],
-    );
-  }
-
-  Widget _buildEventCard(EventModel event, {bool autoExpand = false}) {
-    Color statusColor;
-    switch (event.status) {
-      case 'Go':
-        statusColor = Colors.green;
-        break;
-      case 'No-go':
-        statusColor = Colors.red;
-        break;
-      default:
-        statusColor = Colors.orange;
-    }
-
-    final rowColor = switch (event.status) {
-      'Go' => Colors.green.shade50,
-      'No-go' => Colors.red.shade50,
-      _ => Colors.yellow.shade50,
-    };
-
-    return _EventStatusCard(
-      rowColor: rowColor,
-      statusColor: statusColor,
-      event: event,
-      isLeaderOrAdmin: widget.isLeaderOrAdmin,
-      isAdmin: widget.isAdmin,
-      onStatusChanged: (status) => _updateEventStatus(event.id, status),
-      onDeleteEvent: () => _deleteEvent(event),
-      rsvpSectionBuilder: () => _buildRsvpSection(event),
-      membersRsvpListBuilder: () => _buildMembersRsvpList(
-        event,
-        autoExpand ? _memberToHighlightId : null,
-      ),
-      initialExpanded: autoExpand,
-    );
-  }
-
-  Widget _buildRsvpSection(EventModel event) {
-    return FutureBuilder<List<dynamic>>(
-      future: Future.wait([
-        _supabase.from('event_rsvps').select().eq('event_id', event.id),
-        _supabase.from('musician_profiles').select('member_id'),
-      ]),
-      builder: (context, snapshot) {
-        String currentRsvp = 'Not Set';
-        int attendingCount = 0;
-        int attendingDancers = 0;
-        int attendingMusicians = 0;
-
-        if (snapshot.hasData) {
-          final rsvps = List<Map<String, dynamic>>.from(
-            snapshot.data![0] as List,
-          );
-          final musicianIds = (snapshot.data![1] as List)
-              .map((item) => item['member_id'].toString())
-              .toSet();
-          final attendingIds = <String>{};
-          for (var item in rsvps) {
-            if (item['rsvp_status'] == 'Attending') attendingCount++;
-            if (item['rsvp_status'] == 'Attending') {
-              attendingIds.add(item['member_id'].toString());
-            }
-            if (item['member_id'] == widget.currentMemberId) {
-              currentRsvp = item['rsvp_status'];
-            }
-          }
-          attendingMusicians = attendingIds.intersection(musicianIds).length;
-          attendingDancers = attendingCount - attendingMusicians;
-        }
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (widget.isLeaderOrAdmin)
-                    Text(
-                      'Dancers: $attendingDancers  Musicians: $attendingMusicians',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    )
-                  else
-                    const SizedBox.shrink(),
-                  Text(
-                    'Your RSVP: $currentRsvp',
-                    style: const TextStyle(fontStyle: FontStyle.italic),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _rsvpButton(event, 'Attending', Colors.green, currentRsvp),
-                  _rsvpButton(event, 'Maybe', Colors.orange, currentRsvp),
-                  _rsvpButton(event, 'Not Attending', Colors.red, currentRsvp),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _rsvpButton(
-    EventModel event,
-    String status,
-    Color color,
-    String currentStatus,
-  ) {
-    final bool isSelected = currentStatus == status;
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected ? color : Colors.grey.shade200,
-        foregroundColor: isSelected ? Colors.white : Colors.black87,
-      ),
-      onPressed: _canUpdateOwnRsvp(event)
-          ? () => _handleOwnRsvpTap(event, status, currentStatus)
-          : null,
-      child: Text(status),
-    );
-  }
-
-  // Append inside _EventsScreenState in lib/views/events_screen.dart
-
-  /// Builds a list of all team members and their current RSVP status for a given event.
-  bool _isPastEvent(EventModel event) {
-    final today = DateTime.now();
-    return _isPastDate(event.eventDate, today);
-  }
-
-  bool _isPastDate(DateTime date, DateTime today) {
-    return DateTime(
-      date.year,
-      date.month,
-      date.day,
-    ).isBefore(DateTime(today.year, today.month, today.day));
-  }
-
-  bool _canUpdateOwnRsvp(EventModel event) {
-    if (_isPastEvent(event)) return false;
-    if (widget.isLeaderOrAdmin) return true;
-    // No-go locks RSVPs entirely; Go/past-deadline still allow moving to Yes,
-    // so those buttons stay enabled and are gated per-tap instead.
-    return event.status != 'No-go';
-  }
-
-  // Once an event is Go, or its response deadline has passed, a Member may
-  // still move to Attending but may no longer move away from it.
-  bool _isRsvpLockedToYes(EventModel event) {
-    if (event.status == 'Go') return true;
-    final deadline = event.responseDeadline;
-    return deadline != null && _isPastDate(deadline, DateTime.now());
-  }
-
-  Widget _buildMembersRsvpList(EventModel event, [String? highlightMemberId]) {
-    if (!widget.isLeaderOrAdmin) {
-      return const SizedBox.shrink();
-    }
-    return _StableMembersRsvpList(
-      event: event,
-      isLeaderOrAdmin: widget.isLeaderOrAdmin,
-      isAdmin: widget.isAdmin,
-      supabase: _supabase,
-      highlightMemberId: highlightMemberId,
     );
   }
 
@@ -435,6 +328,17 @@ class _EventsScreenState extends State<EventsScreen>
     await _setOwnRsvp(event, status, comment: comment);
   }
 
+  bool _isRsvpLockedToYes(EventModel event) {
+    if (event.status == 'Go') return true;
+    final deadline = event.responseDeadline;
+    return deadline != null &&
+        DateTime(
+          deadline.year,
+          deadline.month,
+          deadline.day,
+        ).isBefore(DateTime.now());
+  }
+
   Future<void> _showRsvpLockedNotice() {
     return showDialog<void>(
       context: context,
@@ -442,7 +346,7 @@ class _EventsScreenState extends State<EventsScreen>
         title: const Text('RSVP locked'),
         content: const Text(
           'Please discuss this with a Leader who can change it for you - '
-          'Your attendance may effect the booking',
+          'Your attendance may affect the booking',
         ),
         actions: [
           FilledButton(
@@ -564,139 +468,160 @@ class _EventsScreenState extends State<EventsScreen>
   }
 
   void _showCreateEventDialog(BuildContext context) {
-    final titleController = TextEditingController();
-    final locationController = TextEditingController();
-    final descriptionController = TextEditingController();
-    String type = 'Practice';
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
-    DateTime? responseDeadline;
-
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create Event / Practice'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: 'Title'),
+      builder: (context) => const _CreateEventDialog(),
+    );
+  }
+}
+
+class _CreateEventDialog extends StatefulWidget {
+  const _CreateEventDialog();
+
+  @override
+  State<_CreateEventDialog> createState() => _CreateEventDialogState();
+}
+
+class _CreateEventDialogState extends State<_CreateEventDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _locationController;
+  late final TextEditingController _descriptionController;
+  String _type = 'Practice';
+  DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+  DateTime? _responseDeadline;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController();
+    _locationController = TextEditingController();
+    _descriptionController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _locationController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create Event / Practice'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(labelText: 'Title'),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: _type,
+              items: ['Practice', 'Booking']
+                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                  .toList(),
+              onChanged: (val) => setState(() => _type = val ?? 'Practice'),
+              decoration: const InputDecoration(labelText: 'Type'),
+            ),
+            TextField(
+              controller: _locationController,
+              decoration: const InputDecoration(labelText: 'Location'),
+            ),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(labelText: 'Details'),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                'Date: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
               ),
-              DropdownButtonFormField<String>(
-                initialValue: type,
-                items: ['Practice', 'Booking']
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (val) => type = val ?? 'Practice',
-                decoration: const InputDecoration(labelText: 'Type'),
-              ),
-              TextField(
-                controller: locationController,
-                decoration: const InputDecoration(labelText: 'Location'),
-              ),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(labelText: 'Details'),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 8),
-              StatefulBuilder(
-                builder: (context, setDialogState) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Date: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                  ),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 3650)),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDate,
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 3650)),
+                );
+                if (picked != null) {
+                  setState(() {
+                    _selectedDate = DateTime(
+                      picked.year,
+                      picked.month,
+                      picked.day,
                     );
-                    if (picked != null) {
-                      setDialogState(() {
-                        selectedDate = DateTime(
-                          picked.year,
-                          picked.month,
-                          picked.day,
-                        );
-                      });
-                    }
-                  },
-                ),
+                  });
+                }
+              },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                _responseDeadline == null
+                    ? 'Response deadline: None'
+                    : 'Response deadline: ${_responseDeadline!.day}/${_responseDeadline!.month}/${_responseDeadline!.year}',
               ),
-              StatefulBuilder(
-                builder: (context, setDialogState) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    responseDeadline == null
-                        ? 'Response deadline: None'
-                        : 'Response deadline: ${responseDeadline!.day}/${responseDeadline!.month}/${responseDeadline!.year}',
-                  ),
-                  trailing: const Icon(Icons.event_available),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: responseDeadline ?? selectedDate,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 3650)),
-                    );
-                    if (picked != null)
-                      setDialogState(() => responseDeadline = picked);
-                  },
-                ),
-              ),
-            ],
-          ),
+              trailing: const Icon(Icons.event_available),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _responseDeadline ?? _selectedDate,
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 3650)),
+                );
+                if (picked != null) {
+                  setState(() => _responseDeadline = picked);
+                }
+              },
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (titleController.text.isNotEmpty) {
-                final newEvent = EventModel(
-                  id: '',
-                  title: titleController.text,
-                  eventType: type,
-                  eventDate: selectedDate,
-                  location: locationController.text,
-                  description: descriptionController.text,
-                  responseDeadline: responseDeadline,
-                  status: 'Pending',
-                  createdAt: DateTime.now(),
-                  updatedAt: DateTime.now(),
-                );
-                final insertedEvent = await _supabase
-                    .from('events')
-                    .insert({
-                      'title': newEvent.title,
-                      'event_type': newEvent.eventType,
-                      'event_date': newEvent.eventDate.toIso8601String(),
-                      'location': newEvent.location,
-                      'description': newEvent.description,
-                      'response_deadline': newEvent.responseDeadline
-                          ?.toIso8601String(),
-                      'status': newEvent.status,
-                    })
-                    .select('id')
-                    .single();
-                await _dispatchNotification(
-                  'event_created',
-                  insertedEvent['id'].toString(),
-                  changeDescription: 'A new $type was created',
-                );
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            if (_titleController.text.isNotEmpty) {
+              final insertedEvent = await Supabase.instance.client
+                  .from('events')
+                  .insert({
+                    'title': _titleController.text,
+                    'event_type': _type,
+                    'event_date': _selectedDate.toIso8601String(),
+                    'location': _locationController.text,
+                    'description': _descriptionController.text,
+                    'response_deadline': _responseDeadline?.toIso8601String(),
+                    'status': 'Pending',
+                  })
+                  .select('id')
+                  .single();
+
+              try {
+                await Supabase.instance.client.functions.invoke(
+                  'send-push-notification',
+                  body: {
+                    'notification_type': 'event_created',
+                    'event_id': insertedEvent['id'].toString(),
+                    'change_description': 'A new $_type was created',
+                  },
+                );
+              } catch (_) {}
+
+              if (context.mounted) Navigator.pop(context);
+            }
+          },
+          child: const Text('Create'),
+        ),
+      ],
     );
   }
 }
@@ -707,23 +632,30 @@ class _EventStatusCard extends StatefulWidget {
   final EventModel event;
   final bool isLeaderOrAdmin;
   final bool isAdmin;
+  final String currentMemberId;
+  final SupabaseClient supabase;
   final ValueChanged<String> onStatusChanged;
   final VoidCallback onDeleteEvent;
-  final Widget Function() rsvpSectionBuilder;
-  final Widget Function() membersRsvpListBuilder;
-  final bool initialExpanded;
+  final Function(EventModel, String, String) onHandleOwnRsvpTap;
+  final String? highlightMemberId;
+  final bool isExpanded;
+  final VoidCallback onToggleExpanded;
 
   const _EventStatusCard({
+    super.key,
     required this.rowColor,
     required this.statusColor,
     required this.event,
     required this.isLeaderOrAdmin,
     required this.isAdmin,
+    required this.currentMemberId,
+    required this.supabase,
     required this.onStatusChanged,
     required this.onDeleteEvent,
-    required this.rsvpSectionBuilder,
-    required this.membersRsvpListBuilder,
-    this.initialExpanded = false,
+    required this.onHandleOwnRsvpTap,
+    required this.onToggleExpanded,
+    this.highlightMemberId,
+    required this.isExpanded,
   });
 
   @override
@@ -731,16 +663,23 @@ class _EventStatusCard extends StatefulWidget {
 }
 
 class _EventStatusCardState extends State<_EventStatusCard> {
-  late bool _isExpanded = widget.initialExpanded;
+  late Future<List<dynamic>> _countsFuture;
 
   @override
-  void didUpdateWidget(covariant _EventStatusCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // ListView reuses this State across rebuilds, so a newly-arrived
-    // autoExpand request must be applied explicitly.
-    if (widget.initialExpanded && !oldWidget.initialExpanded) {
-      setState(() => _isExpanded = true);
-    }
+  void initState() {
+    super.initState();
+    _fetchCounts();
+  }
+
+  void _fetchCounts() {
+    _countsFuture = Future.wait([
+      widget.supabase
+          .from('event_rsvps')
+          .select('member_id, rsvp_status')
+          .eq('event_id', widget.event.id)
+          .eq('rsvp_status', 'Attending'),
+      widget.supabase.from('musician_profiles').select('member_id'),
+    ]);
   }
 
   Widget _buildStatusChip(EventModel event) {
@@ -821,10 +760,10 @@ class _EventStatusCardState extends State<_EventStatusCard> {
             color: widget.rowColor,
             borderRadius: BorderRadius.vertical(
               top: const Radius.circular(4),
-              bottom: Radius.circular(_isExpanded ? 0 : 4),
+              bottom: Radius.circular(widget.isExpanded ? 0 : 4),
             ),
             child: InkWell(
-              onTap: () => setState(() => _isExpanded = !_isExpanded),
+              onTap: widget.onToggleExpanded,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -847,18 +786,53 @@ class _EventStatusCardState extends State<_EventStatusCard> {
                             Text(
                               'Response deadline: ${event.responseDeadline!.day}/${event.responseDeadline!.month}/${event.responseDeadline!.year}',
                             ),
+                          if (widget.isLeaderOrAdmin && !widget.isExpanded)
+                            FutureBuilder<List<dynamic>>(
+                              future: _countsFuture,
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) return const SizedBox.shrink();
+                                final rsvps = snapshot.data![0] as List;
+                                final musicianIds = (snapshot.data![1] as List)
+                                    .map((e) => e['member_id'].toString())
+                                    .toSet();
+
+                                int dancers = 0;
+                                int musicians = 0;
+
+                                for (final rsvp in rsvps) {
+                                  final mId = rsvp['member_id'].toString();
+                                  if (musicianIds.contains(mId)) {
+                                    musicians++;
+                                  } else {
+                                    dancers++;
+                                  }
+                                }
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Text(
+                                    'Dancers: $dancers | Musicians: $musicians',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade800,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                         ],
                       ),
                     ),
                     _buildStatusChip(event),
                     const SizedBox(width: 8),
-                    Icon(_isExpanded ? Icons.expand_less : Icons.expand_more),
+                    Icon(widget.isExpanded ? Icons.expand_less : Icons.expand_more),
                   ],
                 ),
               ),
             ),
           ),
-          if (_isExpanded)
+          if (widget.isExpanded)
             Column(
               children: [
                 Padding(
@@ -892,8 +866,26 @@ class _EventStatusCardState extends State<_EventStatusCard> {
                   ),
                 ),
                 const Divider(),
-                widget.rsvpSectionBuilder(),
-                widget.membersRsvpListBuilder(),
+                _RsvpSectionWidget(
+                  event: event,
+                  currentMemberId: widget.currentMemberId,
+                  isLeaderOrAdmin: widget.isLeaderOrAdmin,
+                  supabase: widget.supabase,
+                  onHandleOwnRsvpTap: (event, status, oldStatus) async {
+                    await widget.onHandleOwnRsvpTap(event, status, oldStatus);
+                    setState(() {
+                      _fetchCounts();
+                    });
+                  },
+                ),
+                if (widget.isLeaderOrAdmin)
+                  _StableMembersRsvpList(
+                    event: event,
+                    isLeaderOrAdmin: widget.isLeaderOrAdmin,
+                    isAdmin: widget.isAdmin,
+                    supabase: widget.supabase,
+                    highlightMemberId: widget.highlightMemberId,
+                  ),
                 if (widget.isAdmin)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
@@ -930,6 +922,136 @@ class _EventStatusCardState extends State<_EventStatusCard> {
           if (mounted) setState(() {});
         },
       ),
+    );
+  }
+}
+
+class _RsvpSectionWidget extends StatefulWidget {
+  final EventModel event;
+  final String currentMemberId;
+  final bool isLeaderOrAdmin;
+  final SupabaseClient supabase;
+  final Function(EventModel, String, String) onHandleOwnRsvpTap;
+
+  const _RsvpSectionWidget({
+    required this.event,
+    required this.currentMemberId,
+    required this.isLeaderOrAdmin,
+    required this.supabase,
+    required this.onHandleOwnRsvpTap,
+  });
+
+  @override
+  State<_RsvpSectionWidget> createState() => _RsvpSectionWidgetState();
+}
+
+class _RsvpSectionWidgetState extends State<_RsvpSectionWidget> {
+  late Future<List<dynamic>> _rsvpDataFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  void _fetchData() {
+    _rsvpDataFuture = Future.wait([
+      widget.supabase.from('event_rsvps').select().eq('event_id', widget.event.id),
+      widget.supabase.from('musician_profiles').select('member_id'),
+    ]);
+  }
+
+  bool _canUpdateOwnRsvp(EventModel event) {
+    final today = DateTime.now();
+    final isPast = DateTime(event.eventDate.year, event.eventDate.month, event.eventDate.day)
+        .isBefore(DateTime(today.year, today.month, today.day));
+    if (isPast) return false;
+    if (widget.isLeaderOrAdmin) return true;
+    return event.status != 'No-go';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<dynamic>>(
+      future: _rsvpDataFuture,
+      builder: (context, snapshot) {
+        String currentRsvp = 'Not Set';
+        int attendingCount = 0;
+        int attendingDancers = 0;
+        int attendingMusicians = 0;
+
+        if (snapshot.hasData) {
+          final rsvps = List<Map<String, dynamic>>.from(snapshot.data![0] as List);
+          final musicianIds = (snapshot.data![1] as List)
+              .map((item) => item['member_id'].toString())
+              .toSet();
+          final attendingIds = <String>{};
+          for (var item in rsvps) {
+            if (item['rsvp_status'] == 'Attending') {
+              attendingCount++;
+              attendingIds.add(item['member_id'].toString());
+            }
+            if (item['member_id'] == widget.currentMemberId) {
+              currentRsvp = item['rsvp_status'];
+            }
+          }
+          attendingMusicians = attendingIds.intersection(musicianIds).length;
+          attendingDancers = attendingCount - attendingMusicians;
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (widget.isLeaderOrAdmin)
+                    Text(
+                      'Dancers: $attendingDancers  Musicians: $attendingMusicians',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    )
+                  else
+                    const SizedBox.shrink(),
+                  Text(
+                    'Your RSVP: $currentRsvp',
+                    style: const TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _rsvpButton('Attending', Colors.green, currentRsvp),
+                  _rsvpButton('Maybe', Colors.orange, currentRsvp),
+                  _rsvpButton('Not Attending', Colors.red, currentRsvp),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _rsvpButton(String status, Color color, String currentStatus) {
+    final bool isSelected = currentStatus == status;
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? color : Colors.grey.shade200,
+        foregroundColor: isSelected ? Colors.white : Colors.black87,
+      ),
+      onPressed: _canUpdateOwnRsvp(widget.event)
+          ? () async {
+              await widget.onHandleOwnRsvpTap(widget.event, status, currentStatus);
+              setState(() {
+                _fetchData();
+              });
+            }
+          : null,
+      child: Text(status),
     );
   }
 }
@@ -1053,9 +1175,7 @@ class _EventDetailsDialogState extends State<_EventDetailsDialog> {
                 : changes.join(', '),
           },
         );
-      } catch (_) {
-        // Notification delivery must not block saving event details.
-      }
+      } catch (_) {}
       widget.onSaved();
       if (mounted) Navigator.pop(context);
     } catch (error) {

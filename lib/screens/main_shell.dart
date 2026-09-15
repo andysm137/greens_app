@@ -89,63 +89,61 @@ class _MainShellState extends State<MainShell> {
       appBar: AppBar(
         title: Text('Silkstone Greens: ${_workspaceTitles[_selectedIndex]}'),
         actions: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                children: [
-                  Text(
-                    widget.currentMember.isAdmin
-                        ? 'Admin'
-                        : (widget.currentMember.isLeader
-                              ? 'Leader'
-                              : 'Member'),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      IconButton(
-                        tooltip: 'Notifications',
-                        icon: const Icon(Icons.notifications_outlined),
-                        onPressed: _showNotificationMenu,
-                      ),
-                      if (_unreadNotificationCount > 0)
-                        Positioned(
-                          right: 4,
-                          top: 2,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              _unreadNotificationCount > 99
-                                  ? '99+'
-                                  : '$_unreadNotificationCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              children: [
+                Text(
+                  widget.currentMember.isAdmin
+                      ? 'Admin'
+                      : (widget.currentMember.isLeader ? 'Leader' : 'Member'),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      tooltip: 'Notifications',
+                      icon: const Icon(Icons.notifications_outlined),
+                      onPressed: _showNotificationMenu,
+                    ),
+                    if (_unreadNotificationCount > 0)
+                      Positioned(
+                        right: 4,
+                        top: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            _unreadNotificationCount > 99
+                                ? '99+'
+                                : '$_unreadNotificationCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                    ],
-                  ),
-                  IconButton(
-                    tooltip: 'Sign out',
-                    icon: const Icon(Icons.logout),
-                    onPressed: () => Supabase.instance.client.auth.signOut(),
-                  ),
-                ],
-              ),
+                      ),
+                  ],
+                ),
+                IconButton(
+                  tooltip: 'Sign out',
+                  icon: const Icon(Icons.logout),
+                  onPressed: () => Supabase.instance.client.auth.signOut(),
+                ),
+              ],
             ),
-          ],
-      ), //AppBar
+          ),
+        ],
+      ),
       body: isMobile
           ? _getSelectedWorkspaceWidget()
           : Row(
@@ -174,7 +172,7 @@ class _MainShellState extends State<MainShell> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to enable notifications: $error')),
+          SnackBar(content: Text('Unable to disable notifications: $error')),
         );
       }
     }
@@ -190,13 +188,8 @@ class _MainShellState extends State<MainShell> {
           height: MediaQuery.sizeOf(context).height * 0.65,
           child: Column(
             children: [
-              ListTile(
-                title: const Text('Notifications'),
-                /*,
-                trailing: TextButton(
-                  onPressed: () => Navigator.pop(context, 'actions'),
-                  child: const Text('Actions'),
-                ),*/
+              const ListTile(
+                title: Text('Notifications'),
               ),
               Expanded(
                 child: notifications.isEmpty
@@ -403,52 +396,33 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _selectWorkspace(int index) {
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      // Reset pending navigation IDs on manual tab switch
+      _pendingEventId = null;
+      _pendingHighlightMemberId = null;
+      _pendingDancerId = null;
+      _pendingDanceName = null;
+    });
   }
 
-  // This method selects which screen/widget to display based on the active sidebar tab
   Widget _getSelectedWorkspaceWidget() {
     switch (_selectedIndex) {
       case 0:
-        final eventId = _pendingEventId;
-        final highlightMemberId = _pendingHighlightMemberId;
-        if (eventId != null) {
-          // Consume the pending navigation once so returning to this tab
-          // later doesn't keep re-expanding the same event.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() {
-                _pendingEventId = null;
-                _pendingHighlightMemberId = null;
-              });
-            }
-          });
-        }
         return EventsScreen(
+          key: ValueKey('events_screen_${_pendingEventId ?? 'default'}'),
           isLeaderOrAdmin: _isLeaderOrAdmin,
           isAdmin: widget.currentMember.isAdmin,
           currentMemberId: widget.currentMember.id,
-          initialEventId: eventId,
-          highlightMemberId: highlightMemberId,
+          initialEventId: _pendingEventId,
+          highlightMemberId: _pendingHighlightMemberId,
         );
       case 1:
-        final dancerId = _pendingDancerId;
-        final danceName = _pendingDanceName;
-        if (dancerId != null) {
-          // Consume the pending navigation once, same pattern as the events tab.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() {
-                _pendingDancerId = null;
-                _pendingDanceName = null;
-              });
-            }
-          });
-        }
         return SkillsMatrixView(
+          key: ValueKey('skills_screen_${_pendingDancerId ?? 'default'}'),
           currentMember: widget.currentMember,
-          initialDancerId: dancerId,
-          highlightDanceName: danceName,
+          initialDancerId: _pendingDancerId,
+          highlightDanceName: _pendingDanceName,
         );
       case 2:
         return _isLeaderOrAdmin
