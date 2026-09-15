@@ -289,21 +289,29 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
       InkWell(
         onTap: isQualified ? () => _togglePrimary(memberId, position) : null,
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: _getBadgeColor(level),
-            borderRadius: BorderRadius.circular(12),
-            border: isPrimary
-                ? Border.all(color: Colors.red, width: 3.75)
-                : null,
-          ),
-          child: Text(
-            level,
-            style: TextStyle(
-              color: level == '-' ? Colors.black54 : Colors.white,
-              fontWeight: FontWeight.bold,
+        child: SizedBox(
+        height: 48,
+        child: Center(
+            child: Container(
+              height: 40,
+              width: 40,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _getBadgeColor(level),
+                borderRadius: BorderRadius.circular(8),
+                border: isPrimary
+                    ? Border.all(color: Colors.red, width: 3.75)
+                    : null,
+              ),
+              child: Text(
+                level,
+                style: TextStyle(
+                  color: level == '-' ? Colors.black54 : Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
             ),
           ),
         ),
@@ -321,12 +329,12 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
     final hasPrimary = _primaryByPosition.containsKey(position);
     return Container(
       padding: hasPrimary
-          ? const EdgeInsets.symmetric(horizontal: 6, vertical: 2)
+          ? const EdgeInsets.symmetric(horizontal: 2, vertical: 2)
           : null,
       decoration: hasPrimary
           ? BoxDecoration(
               color: Colors.green.shade100,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(2),
             )
           : null,
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -400,6 +408,8 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
         scrollDirection: Axis.horizontal,
         child: DataTable(
           columnSpacing: 16.0,
+//          dataRowMinHeight: 30, // Minimum height for each row
+//          dataRowMaxHeight: 40, // Maximum height for each row
           columns: [
             const DataColumn(
               label: Text(
