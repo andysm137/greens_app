@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/team_member.dart';
 import '../models/competency.dart';
 import '../models/event_model.dart';
-import '../models/booking_layout.dart';
+import '../models/musician_profile.dart';
 
 class TeamRepository {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -455,27 +455,6 @@ extension EventAndBookingRepository on TeamRepository {
     return (response as List)
         .map((map) => map['member_id'].toString())
         .toList();
-  }
-
-  // ==========================================
-  // BOOKING LAYOUTS
-  // ==========================================
-
-  /// Fetch all stored layouts for a given booking event
-  Future<List<BookingLayout>> fetchBookingLayouts(String bookingId) async {
-    final response = await _supabase
-        .from('booking_set_layouts')
-        .select()
-        .eq('booking_id', bookingId);
-
-    return (response as List).map((map) => BookingLayout.fromMap(map)).toList();
-  }
-
-  /// Save or update a dance layout for a specific booking
-  Future<void> saveBookingLayout(BookingLayout layout) async {
-    await _supabase
-        .from('booking_set_layouts')
-        .upsert(layout.toMap(), onConflict: 'booking_id,dance_name');
   }
 
   // ==========================================

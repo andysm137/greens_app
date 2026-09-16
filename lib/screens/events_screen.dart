@@ -119,11 +119,10 @@ class _EventsScreenState extends State<EventsScreen>
         body: {
           'notification_type': notificationType,
           'event_id': eventId,
-          if (changeDescription != null)
-            'change_description': changeDescription,
-          if (memberId != null) 'member_id': memberId,
-          if (oldStatus != null) 'old_status': oldStatus,
-          if (newStatus != null) 'new_status': newStatus,
+          'change_description': ?changeDescription,
+          'member_id': ?memberId,
+          'old_status': ?oldStatus,
+          'new_status': ?newStatus,
         },
       );
     } catch (error) {

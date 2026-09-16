@@ -212,6 +212,7 @@ class _AdminViewState extends State<AdminView>
             (dance) => dance['dance_name'] == oldDanceName,
             orElse: () => <String, dynamic>{},
           );
+    if (!mounted) return;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => DanceCatalogDialog(
@@ -349,16 +350,32 @@ class _AdminViewState extends State<AdminView>
                     member.fullName,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  subtitle: Row(
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          isMusician
-                              ? 'Musician: ${member.instruments}'
-                              : 'Dancer',
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              isMusician
+                                  ? 'Musician: ${member.instruments}'
+                                  : 'Dancer',
+                            ),
+                          ),
+                          _statusChip(_statusFor(member), compact: true),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        member.lastSignInAt != null
+                            ? 'Last login: ${_formatDateTime(member.lastSignInAt!)}'
+                            : 'Last login: Never',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
                         ),
                       ),
-                      _statusChip(_statusFor(member), compact: true),
                     ],
                   ),
                   leading: CircleAvatar(
@@ -410,6 +427,16 @@ class _AdminViewState extends State<AdminView>
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
     );
+  }
+
+  static String _formatDateTime(DateTime dt) {
+    final local = dt.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final year = local.year;
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$day/$month/$year $hour:$minute';
   }
 
   /// Dance Catalog Tab View
@@ -972,13 +999,27 @@ class _AddEditMemberDialogState extends State<AddEditMemberDialog> {
       MemberInviteStatus.notInvited => ('Not invited', Colors.grey),
     };
 
+    final lastLogin = widget.member?.lastSignInAt;
+
     return Align(
       alignment: Alignment.centerLeft,
-      child: Chip(
-        label: Text(label),
-        avatar: Icon(Icons.verified_user, size: 16, color: color),
-        backgroundColor: color.withValues(alpha: 0.15),
-        side: BorderSide(color: color),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Chip(
+            label: Text(label),
+            avatar: Icon(Icons.verified_user, size: 16, color: color),
+            backgroundColor: color.withValues(alpha: 0.15),
+            side: BorderSide(color: color),
+          ),
+          if (lastLogin != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Last login: ${_AdminViewState._formatDateTime(lastLogin)}',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+        ],
       ),
     );
   }

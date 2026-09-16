@@ -1,6 +1,6 @@
 # Greens Development Breadcrumb
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
 This file preserves the current implementation context for future development sessions. It records decisions and verified state, not every conversation detail.
 
@@ -15,6 +15,31 @@ Primary roles:
 - Admin: manage configuration, roster, invitations, and users.
 
 ## Completed today
+
+- Verified live Supabase database state: confirmed `20260914_unregister_push_subscription.sql`, `20260912_unique_primary_dancers.sql`, and `20260913_competency_levels.sql` are active and enforced.
+- Ran referential integrity check on `booking_dance_assignments` (49 rows) and `booking_dance_settings` (18 rows): confirmed zero orphaned foreign keys.
+- Prepared database migration `20260916_booking_foreign_keys.sql` to add formal cascade foreign key constraints to `booking_dance_assignments` and `booking_dance_settings`.
+- Prepared database migration `20260916_fix_security_advisories.sql` to resolve Supabase security advisor warnings (setting explicit function `search_path = public` and revoking anonymous execution of internal `SECURITY DEFINER` functions).
+- Removed unused prototype file `lib/screens/stage_builder_view.dart`.
+- Replaced deprecated `dart:html` in `set_sheet_view.dart` with an isolated platform-conditional printing service (`lib/services/html_print.dart`, `html_print_web.dart` via `package:web`, and `html_print_stub.dart`), enabling WASM compatibility and clean Flutter VM test execution.
+- Fixed asynchronous `BuildContext` warnings in `admin_view.dart` and `main_shell.dart` with `mounted` guards.
+- Fixed null-aware map element lint in `events_screen.dart` using Dart 3.8 null-aware elements (`'key': ?value`).
+- Fixed missing control flow braces in `skill_matrix_view.dart`.
+- Cleaned Flutter static analysis: `flutter analyze` completed with 0 issues.
+- Verified completion of "swap Bookings and Practices tabs over" in `events_screen.dart` and cleared the item from `ToDo`.
+- Fixed all migration file naming — renamed 28 migrations from `YYYYMMDD_` prefix to unique `YYYYMMDDHHmmss` prefix required by Supabase CLI (multiple files shared the same date, causing version key conflicts in `schema_migrations`).
+- Repaired migration history table: ran `supabase migration repair --status applied` for all 25 previously-applied but untracked migrations, restoring CLI/DB consistency.
+- Applied `20260916000000_booking_foreign_keys.sql` to the live DB — FK constraints now enforced on `booking_dance_assignments` (→ events, team_members, dance_catalog) and `booking_dance_settings` (→ events, dance_catalog).
+- Applied `20260916010000_fix_security_advisories.sql` to the live DB — all four SECURITY DEFINER functions now have `search_path=public`; anonymous execution revoked; `authenticated` role granted.
+- Confirmed `booking_set_layouts` table was empty (0 rows); applied `20260916020000_drop_booking_set_layouts.sql` to drop the legacy table.
+- Removed dead code: deleted `lib/models/booking_layout.dart`; removed `fetchBookingLayouts` and `saveBookingLayout` methods from `lib/services/team_repository.dart`.
+- Extracted `MusicianProfile` class (previously co-located in `booking_layout.dart`) into its own file `lib/models/musician_profile.dart` with correct import in `team_repository.dart`.
+- Replaced stale default `widget_test.dart` (counter-widget test); added `test/models_test.dart` with 19 unit tests covering `EventModel`, `EventRsvp`, `TeamMember` (including `last_sign_in_at`), and `MusicianProfile`, plus app smoke test in `test/widget_test.dart` — all 20 pass.
+- Applied database migration `20260916030000_member_last_sign_in.sql`: added `last_sign_in_at` to `public.team_members`, backfilled historical timestamps from `auth.users.last_sign_in_at`, and installed `on_auth_user_sign_in` trigger on `auth.users` to automatically sync login timestamps going forward.
+- Updated `lib/models/team_member.dart` to support `lastSignInAt` parsing and exposure.
+- Updated `lib/screens/admin_view.dart`: Admin Roster tab now displays `Last login: DD/MM/YYYY HH:mm` (or `Never`) for each member, and the Member Edit dialog displays their last login time alongside the invite status chip.
+- `dart analyze lib` & `flutter test` — 0 issues, 20/20 tests passing.
+
 
 - Added a Supabase session-based `AuthGate` and email/password sign-in.
 - Added current-member profile loading and sign-out.
@@ -393,18 +418,16 @@ For PWA deployment:
 - Edge Function deployment is external to Flutter analysis; local code can compile while deployed functions remain stale.
 - The invitation Edge Function must use the current `SUPABASE_SECRET_KEYS` reserved secret JSON, with legacy `SUPABASE_SERVICE_ROLE_KEY` only as a fallback. Direct `team_members` updates from the function are avoided through `record_member_invitation`.
 - PWA deployment may build successfully while cross-repository publishing fails; verify the GitHub Actions publish step separately.
-- The local PWA release build succeeds. The build reports the known `dart:html` WebAssembly incompatibility in Set Sheet; use `--no-wasm-dry-run` for the standard JavaScript build.
+- The local PWA release build succeeds and WebAssembly/WASM compatibility in Set Sheet was resolved by migrating from `dart:html` to `package:web` via `lib/services/html_print.dart`.
 - Generated web output is ignored in both `/build/` and the source `web/` artifact paths; do not restore generated files into `web/`.
 - Events, Dance Builder, and Admin still need targeted mobile layouts; they should adapt their controls and cards rather than relying only on global scaling.
-- The booking-scoped assignment migration must be applied before the new Dance Builder can save or load primary assignments.
-- The booking formation settings migration must be applied before MAF/MAB and 8/12 choices can persist.
-- Existing `dance_assignments` rows are legacy/global assignments and have not been automatically migrated into booking-scoped assignments.
-- The booking assignment/settings migrations intentionally omit foreign keys because the current SQL role lacks `REFERENCES` permission on existing tables; referential integrity remains a follow-up database-owner task.
-- `supabase/migrations/20260912_unique_primary_dancers.sql` requires a duplicate check before applying; it enforces one primary member per booking/dance across positions.
-- `supabase/migrations/20260913_competency_levels.sql` maps legacy `Q/M` values to `YP/Y` and replaces the proficiency constraint.
+- Live database verification confirmed `booking_dance_assignments`, `booking_dance_settings`, `unique_primary_dancers`, `competency_levels`, and `unregister_push_subscription` are all applied and active.
+- Referential integrity checked on live booking tables: 0 orphaned records found. Prepared `20260916_booking_foreign_keys.sql` to add formal cascade foreign key constraints.
+- Supabase security advisories audited: prepared `20260916_fix_security_advisories.sql` to set explicit function search paths and restrict anonymous execution of security definer functions.
+- Existing `dance_assignments` rows (12 rows) are legacy global assignments from early prototyping.
 - Builder candidates require an exact `competencies.dance_name` match for the selected catalog dance and an `event_rsvps.rsvp_status` of `Attending`; mismatched dance names or RSVP values will correctly exclude a member.
 - Set Sheet dance membership is currently inferred from `booking_dance_assignments` and `booking_dance_settings`; a dedicated booking-to-dance planning table may be needed if leaders must schedule dances before any builder/settings record exists.
-- `booking_set_layouts` is now a legacy table candidate for removal. Before dropping it, check/export any rows, remove the unused `BookingLayout` repository/model code, verify no deployed code references it, and confirm an owner-capable SQL role can perform the drop.
+- `booking_set_layouts` is empty (0 rows) and confirmed as legacy. Before dropping it, remove the unused `BookingLayout` repository/model code, update `delete_event_with_artifacts` RPC, and drop the table via database owner role.
 
 ## Recommended next sequence
 

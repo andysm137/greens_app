@@ -1,1 +1,8 @@
-swap Bookins and practive tabs over.
+# ToDo
+
+All active items completed.
+## Remaining / Future Items
+
+- **Mobile-responsive layouts** — Events, Dance Builder, and Admin screens need layout adaptations for smaller viewports (noted in dev log as known risk, not started).
+- **UI integration tests** — Widget/integration tests for `EventsScreen`, `AdminView`, and `MainShell` require a mocked or stubbed Supabase client; tracked as a future task once a DI pattern is introduced.
+- **Supabase security advisor re-check** — After the next Supabase project deploy, verify that security advisor warnings are fully cleared (search_path + anon revocation applied 2026-09-16).

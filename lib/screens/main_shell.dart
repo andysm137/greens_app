@@ -180,6 +180,7 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _showNotificationMenu() async {
     final notifications = await _notificationsRepository.fetchRecent();
+    if (!mounted) return;
     final action = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,

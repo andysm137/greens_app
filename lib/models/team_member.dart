@@ -9,6 +9,7 @@ class TeamMember {
   final String? authUserId;
   final DateTime? invitedAt;
   final DateTime? registeredAt;
+  final DateTime? lastSignInAt;
 
   TeamMember({
     required this.id,
@@ -21,6 +22,7 @@ class TeamMember {
     this.authUserId,
     this.invitedAt,
     this.registeredAt,
+    this.lastSignInAt,
   });
 
   /// Helper getter: returns true if the member has any recorded instruments
@@ -56,6 +58,7 @@ class TeamMember {
       authUserId: map['auth_user_id']?.toString(),
       invitedAt: _parseDate(map['invited_at']),
       registeredAt: _parseDate(map['registered_at']),
+      lastSignInAt: _parseDate(map['last_sign_in_at']),
     );
   }
 

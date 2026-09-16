@@ -62,8 +62,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
       _currentMode = MatrixMode.byDancer;
     }
     _highlightedDanceName = widget.highlightDanceName;
-    if (_highlightedDanceName != null)
+    if (_highlightedDanceName != null) {
       _highlightFadeController.forward(from: 0);
+    }
     // Captured now, synchronously: the parent may clear widget.initialDancerId
     // a frame later, before the awaits below finish.
     _loadInitialData(widget.initialDancerId);

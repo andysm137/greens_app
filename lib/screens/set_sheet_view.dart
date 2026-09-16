@@ -1,4 +1,4 @@
-import 'dart:html' as html;
+import '../services/html_print.dart';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -270,9 +270,7 @@ class _SetSheetViewState extends State<SetSheetView> {
     if (booking == null || sheet == null) return;
 
     final htmlContent = _buildPrintableHtml(booking, sheet);
-    final blob = html.Blob([htmlContent], 'text/html');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    html.window.open(url, '_blank');
+    openHtmlPrintWindow(htmlContent);
   }
 
   String _escapeHtml(String value) => value
