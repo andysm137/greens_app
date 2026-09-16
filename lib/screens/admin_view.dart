@@ -350,21 +350,43 @@ class _AdminViewState extends State<AdminView>
                     member.fullName,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
+                  
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                  subtitle: Row(
                     children: [
                       const SizedBox(height: 2),
                       Row(
                         children: [
                           Expanded(
+                      Expanded(
+                        child: Text(
+                          isMusician
+                              ? 'Musician: ${member.instruments}'
+                              : 'Dancer',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10,0,0,0),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
                             child: Text(
                               isMusician
                                   ? 'Musician: ${member.instruments}'
                                   : 'Dancer',
+                                member.lastSignInAt != null
+                                  ? 'Last login: ${_formatDateTime(member.lastSignInAt!)}'
+                                  : 'Last login: Never',
+                                style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
                             ),
                           ),
                           _statusChip(_statusFor(member), compact: true),
                         ],
+                           ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -374,8 +396,13 @@ class _AdminViewState extends State<AdminView>
                         style: TextStyle(
                           fontSize: 11,
                           color: Colors.grey.shade600,
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: _statusChip(_statusFor(member), compact: true),
                         ),
                       ),
+                      
                     ],
                   ),
                   leading: CircleAvatar(
@@ -418,6 +445,7 @@ class _AdminViewState extends State<AdminView>
       MemberInviteStatus.registered => ('Registered', Colors.green),
       MemberInviteStatus.inviteSent => ('Invite sent', Colors.orange),
       MemberInviteStatus.notInvited => ('Not invited', Colors.grey),
+      MemberInviteStatus.notInvited => ('Not invited', const Color.fromARGB(255, 248, 185, 185)),
     };
 
     return Chip(
