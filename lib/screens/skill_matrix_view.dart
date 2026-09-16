@@ -293,9 +293,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
       case 'L':
         return Colors.orange.shade300;
       case 'YP':
-        return Colors.green.shade400;
-      case 'Y':
         return Colors.purple.shade300;
+      case 'Y':
+        return Colors.green.shade400;
       default:
         return Colors.grey.shade300;
     }
