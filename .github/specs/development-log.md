@@ -1,6 +1,6 @@
 # Greens Development Breadcrumb
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
 This file preserves the current implementation context for future development sessions. It records decisions and verified state, not every conversation detail.
 
@@ -250,6 +250,7 @@ Switch the internal TabController to match the event's type so it isn't filtered
 Set _expandedEventId to the target ID so the card opens automatically.
 
 To ensure clicking a notification accurately opens the target event card regardless of which tab ("Practices" or "Bookings") it belongs to, we must avoid state race conditions during data stream updates.  Explicit Tab Synchronization (_syncTabWithTargetEvent): Instead of relying on passive rebuilds, we check incoming stream items against _expandedEventId. If the target event is located, the tab controller switches via _eventTypeController.animateTo(...) and updates _selectedEventType.  Post-Frame Callback Guarding: We wrap tab transitions inside WidgetsBinding.instance.addPostFrameCallback. This prevents triggering setState while Flutter is in the middle of a build frame.  Safe Widget Updates (didUpdateWidget): When initialEventId or highlightMemberId are updated via MainShell, the state catches the change and re-enables target expansion.  
+- Booking Skill Matrix now treats Learners (`L`) as qualified/assignable for Practice-type events, while Booking-type events still require `YP`/`Y`. Added `_isQualifiedLevel()` in `lib/screens/booking_skill_matrix_view.dart`, keyed off `_selectedEvent.eventType`, and replaced the three hardcoded `YP`/`Y` qualification checks (assignable chip tap-ability, `_candidates()` filtering used by the insufficient-dancers banner) with it. No schema/RLS changes; `flutter analyze` clean on the file.
 
 ## Product TODOs
 

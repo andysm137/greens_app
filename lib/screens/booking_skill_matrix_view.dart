@@ -43,6 +43,11 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
   bool _includeMab = false;
   bool _isLoading = true;
 
+  // Keeps the frozen header's horizontal scroll in step with the body.
+  final ScrollController _headerHScroll = ScrollController();
+  final ScrollController _bodyHScroll = ScrollController();
+  bool _syncingHScroll = false;
+
   Map<String, dynamic>? get _dance {
     for (final item in _dances) {
       if (item['dance_name'] == _selectedDance) return item;
@@ -67,6 +72,22 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
   void initState() {
     super.initState();
     _loadInitialData();
+    _headerHScroll.addListener(() => _syncHScroll(_headerHScroll, _bodyHScroll));
+    _bodyHScroll.addListener(() => _syncHScroll(_bodyHScroll, _headerHScroll));
+  }
+
+  @override
+  void dispose() {
+    _headerHScroll.dispose();
+    _bodyHScroll.dispose();
+    super.dispose();
+  }
+
+  void _syncHScroll(ScrollController from, ScrollController to) {
+    if (_syncingHScroll || !to.hasClients) return;
+    _syncingHScroll = true;
+    to.jumpTo(from.offset);
+    _syncingHScroll = false;
   }
 
   int _compareDancersFirst(TeamMember left, TeamMember right) {
@@ -178,14 +199,22 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
     return null;
   }
 
+  /// Practice events also count Learners ('L') as qualified; Booking events
+  /// require the usual Yes/Yes-Provisional levels.
+  bool _isQualifiedLevel(String? level) {
+    if (level == 'YP' || level == 'Y') return true;
+    if (_selectedEvent?.eventType == 'Practice' && level == 'L') return true;
+    return false;
+  }
+
   Color _getBadgeColor(String level) {
     switch (level) {
       case 'L':
         return Colors.orange.shade300;
       case 'YP':
-        return Colors.green.shade400;
-      case 'Y':
         return Colors.purple.shade300;
+      case 'Y':
+        return Colors.green.shade400;
       default:
         return Colors.grey.shade300;
     }
@@ -274,6 +303,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
           style: TextStyle(
             color: level == '-' ? Colors.black54 : Colors.white,
             fontWeight: FontWeight.bold,
+            fontSize: 12,
           ),
         ),
       ),
@@ -282,21 +312,22 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
 
   DataCell _buildAssignableCell(String memberId, int position) {
     final level = _competency(memberId, position)?.proficiencyLevel ?? '-';
-    final isQualified = level == 'YP' || level == 'Y';
+    final isQualified = _isQualifiedLevel(level);
     final isPrimary = _primaryByPosition[position] == memberId;
+
 
     return DataCell(
       InkWell(
         onTap: isQualified ? () => _togglePrimary(memberId, position) : null,
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-        height: 48,
+        height: 43,
         child: Center(
             child: Container(
-              height: 40,
-              width: 40,
+              height: 36,
+              width: 36,
               alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
                 color: _getBadgeColor(level),
                 borderRadius: BorderRadius.circular(8),
@@ -309,6 +340,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                 style: TextStyle(
                   color: level == '-' ? Colors.black54 : Colors.white,
                   fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
               ),
 
@@ -337,7 +369,10 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
               borderRadius: BorderRadius.circular(2),
             )
           : null,
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+      child: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+      ),
     );
   }
 
@@ -347,7 +382,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
         return false;
       }
       final level = _competency(member.id, position)?.proficiencyLevel;
-      return level == 'YP' || level == 'Y';
+      return _isQualifiedLevel(level);
     }).toList();
   }
 
@@ -384,6 +419,24 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
     return !canAssign(0);
   }
 
+  static const double _memberColWidth = 160;
+  static const double _cellColWidth = 52;
+  static const double _musicianColWidth = 70;
+
+  Widget _fixedCell(double width, Widget child, {bool alignLeft = false}) {
+    return SizedBox(
+      width: width,
+      height: 43,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Align(
+          alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
+          child: child,
+        ),
+      ),
+    );
+  }
+
   Widget _buildMatrixTable() {
     if (_selectedEvent == null) {
       return const Center(child: Text('No future events available.'));
@@ -402,68 +455,103 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
       );
     }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 16.0,
-//          dataRowMinHeight: 30, // Minimum height for each row
-//          dataRowMaxHeight: 40, // Maximum height for each row
-          columns: [
-            const DataColumn(
-              label: Text(
-                'Team Member',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            ...List.generate(
-              _positionCount,
-              (i) => DataColumn(
-                label: _positionHeaderLabel('Pos ${i + 1}', i + 1),
-              ),
-            ),
-            DataColumn(label: _positionHeaderLabel('MAF', mafPosition)),
-            DataColumn(label: _positionHeaderLabel('MAB', mabPosition)),
-            const DataColumn(
-              label: Text(
-                'Musician',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-          rows: attendingMembers.map((member) {
-            final isMusician = member.isMusician;
-            return DataRow(
-              cells: [
-                DataCell(
-                  Text(
-                    member.fullName,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-                ...List.generate(
-                  _positionCount,
-                  (i) => isMusician
-                      ? _buildDisabledCell()
-                      : _buildAssignableCell(member.id, i + 1),
-                ),
-                if (!isMusician && _includeMaf)
-                  _buildAssignableCell(member.id, mafPosition)
-                else
-                  _buildDisabledCell(),
-                if (!isMusician && _includeMab)
-                  _buildAssignableCell(member.id, mabPosition)
-                else
-                  _buildDisabledCell(),
-                isMusician
-                    ? _buildInfoCell(member.id, musicianPosition)
-                    : _buildDisabledCell(),
-              ],
-            );
-          }).toList(),
+    final headerRow = Row(
+      children: [
+        _fixedCell(
+          _memberColWidth,
+          const Text(
+            'Team Member',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          alignLeft: true,
         ),
-      ),
+        ...List.generate(
+          _positionCount,
+          (i) => _fixedCell(
+            _cellColWidth,
+            _positionHeaderLabel('Pos ${i + 1}', i + 1),
+          ),
+        ),
+        _fixedCell(_cellColWidth, _positionHeaderLabel('MAF', mafPosition)),
+        _fixedCell(_cellColWidth, _positionHeaderLabel('MAB', mabPosition)),
+        _fixedCell(
+          _musicianColWidth,
+          const Text(
+            'Musician',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    );
+
+    return Column(
+      children: [
+        // Frozen header: scrolls horizontally in step with the body, never vertically.
+        SingleChildScrollView(
+          controller: _headerHScroll,
+          scrollDirection: Axis.horizontal,
+          physics: const ClampingScrollPhysics(),
+          child: headerRow,
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: SingleChildScrollView(
+              controller: _bodyHScroll,
+              scrollDirection: Axis.horizontal,
+              child: Column(
+                children: attendingMembers.map((member) {
+                  final isMusician = member.isMusician;
+                  return Row(
+                    children: [
+                      _fixedCell(
+                        _memberColWidth,
+                        Text(
+                          member.fullName,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        alignLeft: true,
+                      ),
+                      ...List.generate(
+                        _positionCount,
+                        (i) => _fixedCell(
+                          _cellColWidth,
+                          (isMusician
+                                  ? _buildDisabledCell()
+                                  : _buildAssignableCell(member.id, i + 1))
+                              .child,
+                        ),
+                      ),
+                      _fixedCell(
+                        _cellColWidth,
+                        (!isMusician && _includeMaf
+                                ? _buildAssignableCell(member.id, mafPosition)
+                                : _buildDisabledCell())
+                            .child,
+                      ),
+                      _fixedCell(
+                        _cellColWidth,
+                        (!isMusician && _includeMab
+                                ? _buildAssignableCell(member.id, mabPosition)
+                                : _buildDisabledCell())
+                            .child,
+                      ),
+                      _fixedCell(
+                        _musicianColWidth,
+                        (isMusician
+                                ? _buildInfoCell(member.id, musicianPosition)
+                                : _buildDisabledCell())
+                            .child,
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
