@@ -375,6 +375,9 @@ class _SetSheetViewState extends State<SetSheetView> {
   .special-wrap { text-align: center; margin-bottom: 4px; }
   .special-row { display: inline-table; border-collapse: collapse; min-width: 220px; }
   .special-row td { border: 1px solid #ccc; padding: 4px 8px; font-size: 13px; }
+  .level-y { color: #43a047; }
+  .level-yp { color: #ab47bc; }
+  .level-l { color: #fb8c00; }
 </style>
 <script>
   window.addEventListener('load', function () { window.print(); });
@@ -415,7 +418,15 @@ class _SetSheetViewState extends State<SetSheetView> {
           .map((candidate) {
             final isPrimary = candidate['id'] == primaryId;
             final name = _escapeHtml(candidate['name'] as String);
-            return isPrimary ? '<strong>$name</strong>' : name;
+            final level = candidate['proficiencyLevel'] as String;
+            final colorClass = switch (level) {
+              'Y' => 'level-y',
+              'YP' => 'level-yp',
+              'L' => 'level-l',
+              _ => '',
+            };
+            final coloredName = '<span class="$colorClass">$name</span>';
+            return isPrimary ? '<strong>$coloredName</strong>' : coloredName;
           })
           .join(', ');
     }
