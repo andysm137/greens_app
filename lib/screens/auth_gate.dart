@@ -29,11 +29,6 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     final supabase = Supabase.instance.client;
-
-    if (_isPasswordRecovery) {
-      return const ChangePasswordScreen();
-    }
-
     final session = supabase.auth.currentSession;
     if (session == null) {
       return const SignInScreen();
@@ -52,7 +47,16 @@ class _AuthGateState extends State<AuthGate> {
           return ProfileRequiredScreen(error: memberSnapshot.error);
         }
 
-        return MainShell(currentMember: memberSnapshot.data!);
+        final member = memberSnapshot.data!;
+        final isPendingInvitation =
+            member.invitedAt != null && member.registeredAt == null;
+        if (_isPasswordRecovery || isPendingInvitation) {
+          return ChangePasswordScreen(
+            completeInvitation: isPendingInvitation,
+          );
+        }
+
+        return MainShell(currentMember: member);
       },
     );
   }
@@ -205,7 +209,9 @@ class _SignInScreenState extends State<SignInScreen> {
 }
 
 class ChangePasswordScreen extends StatefulWidget {
-  const ChangePasswordScreen({super.key});
+  const ChangePasswordScreen({super.key, this.completeInvitation = false});
+
+  final bool completeInvitation;
 
   @override
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
@@ -243,6 +249,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       await Supabase.instance.client.auth.updateUser(
         UserAttributes(password: _passwordController.text),
       );
+      if (widget.completeInvitation) {
+        await Supabase.instance.client.rpc('complete_own_invitation');
+      }
       if (mounted) {
         setState(() {
           _message = 'Password updated. You can now sign in.';

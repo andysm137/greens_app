@@ -1,6 +1,6 @@
 # Greens Development Breadcrumb
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 This file preserves the current implementation context for future development sessions. It records decisions and verified state, not every conversation detail.
 
@@ -255,6 +255,12 @@ To ensure clicking a notification accurately opens the target event card regardl
 - Tightened Booking Skill Matrix row height (48px -> 43px), badge size (40px -> 36px) and badge/level font size (-> 12px) so primary-assignment borders no longer wrap the level text, widened then re-tuned position/MAF/MAB column width (56px -> 64px -> 52px) and reduced per-cell horizontal padding (8px -> 3px) so column gaps approach the (zero) row gaps while the green primary-highlighted header (`Pos 12`, font size 13) still fits on one line.
 - Applied the identical frozen-header, tightened-row/column formatting to the main Skill Matrix (`lib/screens/skill_matrix_view.dart`) for both the By Dance and By Dancer tables: added the same synced `_headerHScroll`/`_bodyHScroll` controllers, `_fixedCell`/`_positionHeaderLabel` helpers, and fixed `_nameColWidth`/`_cellColWidth`/`_musicianColWidth` columns; the By Dancer table's amber deep-link row highlight (previously `DataRow.color`) now applies via a `Container` wrapping each fixed-width `Row`.
 - Fixed Set Sheet candidate omissions caused by Supabase's default 1,000-row response cap: `competencies` has exceeded that limit (1,095 rows), but `set_sheet_view.dart` was fetching every row and could silently omit valid records, including Learners for Blackrod Bottoms. `_loadSheet()` now derives the selected booking's dance names from its assignments/settings first, then fetches only those dances' competency rows with `.inFilter('dance_name', danceNames)`. Practice candidate eligibility remains `L`/`YP`/`Y`; Booking eligibility remains `YP`/`Y`. Confirmed live data for the 17 September Practice includes Emma Holling (`L`, positions 4/5), Liz Cook (`L`, 6), and Amanda (`L`, 8); `flutter analyze lib/screens/set_sheet_view.dart` passes.
+- Applied `20260918000000_member_nicknames.sql`: added nullable `team_members.nickname`, and an RLS-protected singleton `app_display_settings` table containing the Admin-managed `use_nicknames` preference. Authenticated users can read the preference; only Admins can update it. The migration is applied to the live database.
+- Applied `20260918010000_member_display_settings_privileges.sql`: granted `SELECT` and `UPDATE` on `app_display_settings` to `authenticated`. The initial nickname-settings migration created the RLS policies but omitted PostgreSQL table-level grants, causing the Admin nickname switch to fail with error `42501`; both required privileges are now confirmed live.
+- Fixed invite-link access bypass: Supabase invitation links establish a session immediately, and `AuthGate` previously sent every session directly to `MainShell`. `AuthGate` now loads the linked member profile first and routes profiles with `invited_at` but no `registered_at` to `ChangePasswordScreen`, even if Supabase reports a normal sign-in rather than `passwordRecovery`. Added and applied `20260918020000_complete_own_invitation.sql`, an authenticated self-service RPC that stamps `registered_at` only for the caller's own pending invitation after `auth.updateUser(password: ...)` succeeds. The password screen then signs out so the member must sign in using their new credentials. Focused analysis passes and `flutter test` passes all 21 tests.
+- Added a dancer-only `Caller` competency position (`position_number = 97`) to Skills Matrix. It is editable for every dance in both By Dance and By Dancer modes, but never shown as a valid cell for musician rows. In By Dancer mode, selecting a musician now shows only Dance Name and Musician columns; selecting a dancer shows Dance Name, positions 1-12, MAF, MAB, and Caller, with no Musician column. No migration was required because `competencies.position_number` has no restrictive position check. `flutter analyze lib/screens/skill_matrix_view.dart` and model tests pass.
+- Added `MemberDisplaySettings`/`MemberDisplaySettingsRepository` (`lib/services/member_display_settings.dart`) and initialized its global notifier at startup. The Admin Roster now has a `Use nicknames across the app` switch, and both Add Member/Edit Member and Invite Member forms have an optional Nickname field. Nickname mode displays the stored nickname when present, otherwise the first name parsed from `full_name`, and falls back safely to full name for an empty value.
+- Routed principal member-name displays through the shared policy: Booking Skill Matrix, Skills Matrix, Dance Builder candidate/dialog/primary labels, Set Sheet (on-screen and print data), Event RSVP roster, and Admin roster. Set Sheet listens for preference changes and reloads its cached name data immediately. Added a model test for nickname and first-name fallback; full `flutter analyze` and `flutter test test/models_test.dart` pass (20 tests).
 
 ## Product TODOs
 
@@ -319,6 +325,7 @@ Flutter:
 - `lib/screens/booking_skill_matrix_view.dart`: event/dance-scoped Skill Matrix grid limited to attendees, with tap-to-primary assignment sharing Dance Builder's booking data, and the same frozen-header/fixed-column layout as `skill_matrix_view.dart`.
 - `lib/screens/set_sheet_view.dart`: printable event set sheet with Dance Builder-aligned candidate lists and equal-height position rows.
 - `lib/screens/admin_view.dart`: roster, profile editing, invitations, deletion, alphabetical catalog administration, and notification settings.
+- `lib/services/member_display_settings.dart`: global nickname/full-name display setting, first-name fallback, and `app_display_settings` persistence.
 - `lib/services/team_repository.dart`: current data access, still broad and due for feature-specific separation.
 - `lib/services/admin_auth_service.dart`: Edge Function calls for admin member operations.
 - `lib/services/notification_settings_repository.dart`: Admin notification settings CRUD and per-type test-send.
@@ -335,6 +342,8 @@ Supabase:
 - `supabase/functions/member-auth-statuses/index.ts`
 - `supabase/functions/delete-member/index.ts`
 - `supabase/migrations/20260912_booking_assignments.sql`: booking-scoped primary assignment table and RLS.
+- `supabase/migrations/20260918000000_member_nicknames.sql`: nullable member nicknames and Admin-managed global display-name setting.
+- `supabase/migrations/20260918020000_complete_own_invitation.sql`: completes a caller's pending invite only after password setup.
 - `supabase/migrations/20260912_booking_dance_settings.sql`: persistent booking/dance formation settings and RLS.
 - `supabase/migrations/20260912_unique_primary_dancers.sql`: database uniqueness constraint for one primary dancer per booking/dance.
 - `supabase/migrations/20260913_harden_role_access.sql`: applied role-based RLS cleanup for member, leader, and admin access.

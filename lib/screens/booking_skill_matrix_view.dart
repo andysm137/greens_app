@@ -290,10 +290,11 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
 
   DataCell _buildInfoCell(String memberId, int position) {
     final level = _competency(memberId, position)?.proficiencyLevel ?? '-';
+    final scale = _matrixScale;
     return DataCell(
       Container(
         alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 6 * scale),
         decoration: BoxDecoration(
           color: _getBadgeColor(level),
           borderRadius: BorderRadius.circular(12),
@@ -303,7 +304,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
           style: TextStyle(
             color: level == '-' ? Colors.black54 : Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 12,
+            fontSize: 12 * scale,
           ),
         ),
       ),
@@ -314,6 +315,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
     final level = _competency(memberId, position)?.proficiencyLevel ?? '-';
     final isQualified = _isQualifiedLevel(level);
     final isPrimary = _primaryByPosition[position] == memberId;
+    final scale = _matrixScale;
 
 
     return DataCell(
@@ -321,13 +323,13 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
         onTap: isQualified ? () => _togglePrimary(memberId, position) : null,
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-        height: 43,
+          height: 43 * scale,
         child: Center(
             child: Container(
-              height: 36,
-              width: 36,
+            height: 36 * scale,
+            width: 36 * scale,
               alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            padding: EdgeInsets.symmetric(horizontal: 6 * scale, vertical: 4 * scale),
               decoration: BoxDecoration(
                 color: _getBadgeColor(level),
                 borderRadius: BorderRadius.circular(8),
@@ -340,7 +342,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                 style: TextStyle(
                   color: level == '-' ? Colors.black54 : Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 12 * scale,
                 ),
               ),
 
@@ -359,9 +361,10 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
 
   Widget _positionHeaderLabel(String label, int position) {
     final hasPrimary = _primaryByPosition.containsKey(position);
+    final scale = _matrixScale;
     return Container(
       padding: hasPrimary
-          ? const EdgeInsets.symmetric(horizontal: 2, vertical: 2)
+          ? EdgeInsets.symmetric(horizontal: 2 * scale, vertical: 2 * scale)
           : null,
       decoration: hasPrimary
           ? BoxDecoration(
@@ -371,7 +374,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
           : null,
       child: Text(
         label,
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13 * scale),
       ),
     );
   }
@@ -423,12 +426,20 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
   static const double _cellColWidth = 52;
   static const double _musicianColWidth = 70;
 
+  double get _matrixScale {
+    final size = MediaQuery.sizeOf(context);
+    if (size.width >= 700) return 1;
+    final minimum = size.width > size.height ? 0.78 : 0.68;
+    return (size.width / 700).clamp(minimum, 1);
+  }
+
   Widget _fixedCell(double width, Widget child, {bool alignLeft = false}) {
+    final scale = _matrixScale;
     return SizedBox(
-      width: width,
-      height: 43,
+      width: width * scale,
+      height: 43 * scale,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
+        padding: EdgeInsets.symmetric(horizontal: 3 * scale),
         child: Align(
           alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
           child: child,
@@ -455,6 +466,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
       );
     }
 
+    final useCompactHeaders = _matrixScale < 1;
     final headerRow = Row(
       children: [
         _fixedCell(
@@ -469,7 +481,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
           _positionCount,
           (i) => _fixedCell(
             _cellColWidth,
-            _positionHeaderLabel('Pos ${i + 1}', i + 1),
+            _positionHeaderLabel(useCompactHeaders ? '${i + 1}' : 'Pos ${i + 1}', i + 1),
           ),
         ),
         _fixedCell(_cellColWidth, _positionHeaderLabel('MAF', mafPosition)),
@@ -508,7 +520,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                       _fixedCell(
                         _memberColWidth,
                         Text(
-                          member.fullName,
+                          member.displayName,
                           style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
                         alignLeft: true,

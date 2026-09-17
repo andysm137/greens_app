@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/member_display_settings.dart';
+
 import '../models/event_model.dart';
 
 class EventsScreen extends StatefulWidget {
@@ -1504,7 +1506,12 @@ class _StableMembersRsvpListState extends State<_StableMembersRsvpList>
                         child: ListTile(
                           dense: true,
                           title: Text(
-                            member['full_name'] ?? 'Unknown Member',
+                            MemberDisplaySettings.nameFor(
+                              fullName:
+                                  member['full_name']?.toString() ??
+                                  'Unknown Member',
+                              nickname: member['nickname']?.toString(),
+                            ),
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           subtitle: comment?.isNotEmpty == true

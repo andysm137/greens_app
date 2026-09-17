@@ -367,7 +367,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                     final isPrimary = member.id == primaryId;
                     return ListTile(
                       title: Text(
-                        member.fullName,
+                        member.displayName,
                         style: TextStyle(
                           fontWeight: isPrimary
                               ? FontWeight.bold
@@ -393,7 +393,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                             ScaffoldMessenger.of(dialogContext).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  '${member.fullName} is already primary at position $existingPosition. Clear that primary before assigning this position.',
+                                  '${member.displayName} is already primary at position $existingPosition. Clear that primary before assigning this position.',
                                 ),
                               ),
                             );
@@ -457,7 +457,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                           item.positionNumber == 0,
                     );
                     return ListTile(
-                      title: Text(member.fullName),
+                      title: Text(member.displayName),
                       subtitle: Text(
                         '${member.instruments ?? 'Musician'} - ${competency.proficiencyLevel}',
                       ),
@@ -508,7 +508,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                   children: [
                     if (primary != null)
                       Text(
-                        primary.fullName,
+                        primary.displayName,
                         style: TextStyle(
                           color: _competencyColor(
                             _competency(primary.id, position)!.proficiencyLevel,
@@ -520,7 +520,7 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
                       (item) => item.id != primaryId,
                     ))
                       Text(
-                        member.fullName,
+                        member.displayName,
                         style: TextStyle(
                           color: _competencyColor(
                             _competency(member.id, position)!.proficiencyLevel,

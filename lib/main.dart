@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:greens_app/screens/auth_gate.dart';
+import 'package:greens_app/services/member_display_settings.dart';
 
 //initial start up script, added in github, alterd in vscode
 //PWA Deployment v1.0 - Fresh build for GitHub Pages hosting
@@ -13,6 +14,7 @@ Future<void> main() async {
     url: 'https://xzvawbevrlatfshsgnum.supabase.co',
     publishableKey: 'sb_publishable_w3f76jQ5ZPNT7SmCds0SQA_eGFxoTAO',
   );
+  await MemberDisplaySettingsRepository().load();
 
   runApp(const SilkstoneGreensApp());
 }
@@ -22,11 +24,14 @@ class SilkstoneGreensApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Silkstone Greens App',
-      theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: true),
-      home: const AuthGate(),
-      debugShowCheckedModeBanner: false,
+    return ValueListenableBuilder<bool>(
+      valueListenable: MemberDisplaySettings.useNicknames,
+      builder: (context, _, _) => MaterialApp(
+        title: 'Silkstone Greens App',
+        theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: true),
+        home: const AuthGate(),
+        debugShowCheckedModeBanner: false,
+      ),
     );
   }
 }

@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:greens_app/models/event_model.dart';
 import 'package:greens_app/models/team_member.dart';
+import 'package:greens_app/services/member_display_settings.dart';
 import 'package:greens_app/models/musician_profile.dart';
 
 void main() {
@@ -113,6 +114,17 @@ void main() {
       expect(member.fullName, 'Alice Smith');
       expect(member.isLeader, isTrue);
       expect(member.isAdmin, isFalse);
+    });
+
+    test('displayName uses nickname then first name when enabled', () {
+      addTearDown(() => MemberDisplaySettings.useNicknames.value = false);
+      MemberDisplaySettings.useNicknames.value = true;
+
+      expect(
+        TeamMember(id: 'm1', fullName: 'Alice Smith', nickname: 'Al').displayName,
+        'Al',
+      );
+      expect(TeamMember(id: 'm2', fullName: 'Bob Jones').displayName, 'Bob');
     });
 
     test('isMusician returns false when instruments is null', () {

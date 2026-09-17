@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/event_model.dart';
+import '../services/member_display_settings.dart';
 
 class SetSheetView extends StatefulWidget {
   const SetSheetView({super.key});
@@ -40,7 +41,20 @@ class _SetSheetViewState extends State<SetSheetView> {
   @override
   void initState() {
     super.initState();
+    MemberDisplaySettings.useNicknames.addListener(_reloadForDisplayNameChange);
     _loadBookings();
+  }
+
+  @override
+  void dispose() {
+    MemberDisplaySettings.useNicknames.removeListener(
+      _reloadForDisplayNameChange,
+    );
+    super.dispose();
+  }
+
+  void _reloadForDisplayNameChange() {
+    _loadSheet();
   }
 
   Future<void> _setHidePastBookings(bool hidePastBookings) async {
@@ -104,7 +118,9 @@ class _SetSheetViewState extends State<SetSheetView> {
             .from('event_rsvps')
             .select('member_id, rsvp_status')
             .eq('event_id', booking.id),
-        _supabase.from('team_members').select('id, full_name, instruments'),
+        _supabase
+          .from('team_members')
+          .select('id, full_name, nickname, instruments'),
         _supabase
             .from('musician_profiles')
             .select('member_id, primary_instrument, is_qualified'),
@@ -124,7 +140,10 @@ class _SetSheetViewState extends State<SetSheetView> {
 
       final memberNames = <String, String>{
         for (final member in members)
-          member['id'].toString(): member['full_name'].toString(),
+          member['id'].toString(): MemberDisplaySettings.nameFor(
+            fullName: member['full_name'].toString(),
+            nickname: member['nickname']?.toString(),
+          ),
       };
       final musicianMemberIds = members
           .where(
@@ -260,7 +279,7 @@ class _SetSheetViewState extends State<SetSheetView> {
       final musicians =
           members
               .where((member) => musicianIds.contains(member['id'].toString()))
-              .map((member) => member['full_name'].toString())
+              .map((member) => memberNames[member['id'].toString()]!)
               .toList()
             ..sort();
       final attendingDancers =
@@ -270,7 +289,7 @@ class _SetSheetViewState extends State<SetSheetView> {
                     attendingIds.contains(member['id'].toString()) &&
                     !musicianIds.contains(member['id'].toString()),
               )
-              .map((member) => member['full_name'].toString())
+                    .map((member) => memberNames[member['id'].toString()]!)
               .toList()
             ..sort();
 

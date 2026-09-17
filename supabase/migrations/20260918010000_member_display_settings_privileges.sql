@@ -1,0 +1,1 @@
+GRANT SELECT, UPDATE ON public.app_display_settings TO authenticated;

@@ -57,6 +57,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
 
   // Special Role Position Markers
   static const int musicianPosition = 0;
+  static const int callerPosition = 97;
   static const int mabPosition = 98;
   static const int mafPosition = 99;
 
@@ -271,6 +272,8 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
     switch (positionNumber) {
       case musicianPosition:
         return 'Musician';
+      case callerPosition:
+        return 'Caller';
       case mafPosition:
         return 'MAF';
       case mabPosition:
@@ -352,12 +355,20 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
   static const double _cellColWidth = 52;
   static const double _musicianColWidth = 80;
 
+  double get _matrixScale {
+    final size = MediaQuery.sizeOf(context);
+    if (size.width >= 700) return 1;
+    final minimum = size.width > size.height ? 0.68 : 0.58;
+    return (size.width / 700).clamp(minimum, 1);
+  }
+
   Widget _fixedCell(double width, Widget child, {bool alignLeft = false}) {
+    final scale = _matrixScale;
     return SizedBox(
-      width: width,
-      height: 43,
+      width: width * scale,
+      height: 43 * scale,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
+        padding: EdgeInsets.symmetric(horizontal: 3 * scale),
         child: Align(
           alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
           child: child,
@@ -369,7 +380,10 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
   Widget _positionHeaderLabel(String label) {
     return Text(
       label,
-      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+      style: TextStyle(
+        fontWeight: FontWeight.bold,
+        fontSize: 13 * _matrixScale,
+      ),
     );
   }
 
@@ -505,8 +519,8 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
               value: member,
               child: Text(
                 member.isMusician
-                    ? '${member.fullName} (${member.instruments})'
-                    : member.fullName,
+                  ? '${member.displayName} (${member.instruments})'
+                  : member.displayName,
               ),
             );
           }).toList(),
@@ -552,9 +566,9 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            member.fullName,
-            style: const TextStyle(
-              fontSize: 15,
+            member.displayName,
+            style: TextStyle(
+              fontSize: 15 * _matrixScale,
               fontWeight: FontWeight.w500,
               decoration: TextDecoration.underline,
             ),
@@ -564,7 +578,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
             Text(
               member.instruments!,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 11 * _matrixScale,
                 fontStyle: FontStyle.italic,
                 color: Colors.purple.shade700,
               ),
@@ -584,6 +598,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
     final hasMaf = _danceHasRole(_selectedDance!, 'MAF');
     final hasMab = _danceHasRole(_selectedDance!, 'MAB');
     final positionCount = _selectedDancePositionCount;
+    final useCompactHeaders = _matrixScale < 1;
 
     final headerRow = Row(
       children: [
@@ -597,10 +612,14 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
         ),
         ...List.generate(
           positionCount,
-          (i) => _fixedCell(_cellColWidth, _positionHeaderLabel('Pos ${i + 1}')),
+          (i) => _fixedCell(
+            _cellColWidth,
+            _positionHeaderLabel(useCompactHeaders ? '${i + 1}' : 'Pos ${i + 1}'),
+          ),
         ),
         _fixedCell(_cellColWidth, _positionHeaderLabel('MAF')),
         _fixedCell(_cellColWidth, _positionHeaderLabel('MAB')),
+        _fixedCell(_cellColWidth, _positionHeaderLabel('Caller')),
         _fixedCell(
           _musicianColWidth,
           const Text(
@@ -647,6 +666,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                         ),
                         _fixedCell(_cellColWidth, _buildDisabledCell().child),
                         _fixedCell(_cellColWidth, _buildDisabledCell().child),
+                        _fixedCell(_cellColWidth, _buildDisabledCell().child),
                         _fixedCell(
                           _musicianColWidth,
                           _buildCell(
@@ -685,6 +705,14 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                                   : _buildDisabledCell())
                               .child,
                         ),
+                        _fixedCell(
+                          _cellColWidth,
+                          _buildCell(
+                            member.id,
+                            _selectedDance!,
+                            callerPosition,
+                          ).child,
+                        ),
                         _fixedCell(_musicianColWidth, _buildDisabledCell().child),
                       ],
                     ],
@@ -707,6 +735,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
     final bool isMusician = _selectedMember!.isMusician;
     final bool isMember =
         !widget.currentMember.isLeader && !widget.currentMember.isAdmin;
+    final useCompactHeaders = _matrixScale < 1;
 
     final headerRow = Row(
       children: [
@@ -718,19 +747,28 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
           ),
           alignLeft: true,
         ),
-        ...List.generate(
-          12,
-          (i) => _fixedCell(_cellColWidth, _positionHeaderLabel('Pos ${i + 1}')),
-        ),
-        _fixedCell(_cellColWidth, _positionHeaderLabel('MAF')),
-        _fixedCell(_cellColWidth, _positionHeaderLabel('MAB')),
-        _fixedCell(
-          _musicianColWidth,
-          const Text(
-            'Musician',
-            style: TextStyle(fontWeight: FontWeight.bold),
+        if (isMusician)
+          _fixedCell(
+            _musicianColWidth,
+            const Text(
+              'Musician',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          )
+        else ...[
+          ...List.generate(
+            12,
+            (i) => _fixedCell(
+              _cellColWidth,
+              _positionHeaderLabel(
+                useCompactHeaders ? '${i + 1}' : 'Pos ${i + 1}',
+              ),
+            ),
           ),
-        ),
+          _fixedCell(_cellColWidth, _positionHeaderLabel('MAF')),
+          _fixedCell(_cellColWidth, _positionHeaderLabel('MAB')),
+          _fixedCell(_cellColWidth, _positionHeaderLabel('Caller')),
+        ],
       ],
     );
 
@@ -772,7 +810,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                             child: Text(
                               dance,
                               style: TextStyle(
-                              fontSize: 15,
+                                fontSize: 15 * _matrixScale,
                                 fontWeight: FontWeight.w500,
                                 decoration: isMember
                                     ? null
@@ -784,15 +822,6 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                           alignLeft: true,
                         ),
                         if (isMusician) ...[
-                          ...List.generate(
-                            12,
-                            (_) => _fixedCell(
-                              _cellColWidth,
-                              _buildDisabledCell().child,
-                            ),
-                          ),
-                          _fixedCell(_cellColWidth, _buildDisabledCell().child),
-                          _fixedCell(_cellColWidth, _buildDisabledCell().child),
                           _fixedCell(
                             _musicianColWidth,
                             _buildCell(
@@ -839,8 +868,12 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                                 .child,
                           ),
                           _fixedCell(
-                            _musicianColWidth,
-                            _buildDisabledCell().child,
+                            _cellColWidth,
+                            _buildCell(
+                              _selectedMember!.id,
+                              dance,
+                              callerPosition,
+                            ).child,
                           ),
                         ],
                       ],
@@ -858,6 +891,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
   /// Interactive Cell Widget for both views
   DataCell _buildCell(String memberId, String danceName, int positionNumber) {
     final level = _getProficiency(memberId, danceName, positionNumber);
+    final scale = _matrixScale;
 
     return DataCell(
       InkWell(
@@ -869,13 +903,13 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
         ),
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          height: 43,
+          height: 43 * scale,
           child: Center(
             child: Container(
-              height: 36,
-              width: 36,
+              height: 36 * scale,
+              width: 36 * scale,
               alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              padding: EdgeInsets.symmetric(horizontal: 6 * scale, vertical: 4 * scale),
               decoration: BoxDecoration(
                 color: _getBadgeColor(level),
                 borderRadius: BorderRadius.circular(8),
@@ -885,7 +919,7 @@ class _SkillsMatrixViewState extends State<SkillsMatrixView>
                 style: TextStyle(
                   color: level == '-' ? Colors.black54 : Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 12 * scale,
                 ),
               ),
             ),

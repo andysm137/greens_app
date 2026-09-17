@@ -1,6 +1,9 @@
+import '../services/member_display_settings.dart';
+
 class TeamMember {
   final String id;
   final String fullName;
+  final String? nickname;
   final String? email;
   final String? phone;
   final bool isLeader;
@@ -14,6 +17,7 @@ class TeamMember {
   TeamMember({
     required this.id,
     required this.fullName,
+    this.nickname,
     this.email,
     this.phone,
     this.isLeader = false,
@@ -27,6 +31,9 @@ class TeamMember {
 
   /// Helper getter: returns true if the member has any recorded instruments
   bool get isMusician => instruments != null && instruments!.trim().isNotEmpty;
+
+  String get displayName =>
+      MemberDisplaySettings.nameFor(fullName: fullName, nickname: nickname);
 
   MemberInviteStatus get inviteStatus {
     if (registeredAt != null) return MemberInviteStatus.registered;
@@ -50,6 +57,7 @@ class TeamMember {
     return TeamMember(
       id: map['id'] ?? '',
       fullName: map['full_name'] ?? '',
+      nickname: map['nickname']?.toString(),
       email: map['email'],
       phone: map['phone'],
       isLeader: map['is_leader'] ?? false,
@@ -69,6 +77,7 @@ class TeamMember {
   Map<String, dynamic> toMap() {
     return {
       'full_name': fullName,
+      'nickname': nickname,
       'email': email,
       'phone': phone,
       'is_leader': isLeader,

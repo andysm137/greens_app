@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/team_member.dart';
 import '../services/admin_auth_service.dart';
+import '../services/member_display_settings.dart';
 import '../services/notification_settings_repository.dart';
 import '../services/team_repository.dart';
 
@@ -18,6 +19,8 @@ class _AdminViewState extends State<AdminView>
   final AdminAuthService _adminAuthService = AdminAuthService();
   final NotificationSettingsRepository _notificationSettingsRepository =
       NotificationSettingsRepository();
+    final MemberDisplaySettingsRepository _memberDisplaySettingsRepository =
+      MemberDisplaySettingsRepository();
   late TabController _tabController;
 
   bool _isLoading = true;
@@ -335,9 +338,20 @@ class _AdminViewState extends State<AdminView>
   /// Roster Tab View
   Widget _buildRosterTab() {
     return Scaffold(
-      body: _members.isEmpty
-          ? const Center(child: Text('No team members found.'))
-          : ListView.builder(
+      body: Column(
+        children: [
+          SwitchListTile(
+            title: const Text('Use nicknames across the app'),
+            value: MemberDisplaySettings.useNicknames.value,
+            onChanged: (value) async {
+              await _memberDisplaySettingsRepository.setUseNicknames(value);
+              if (mounted) setState(() {});
+            },
+          ),
+          Expanded(
+            child: _members.isEmpty
+                ? const Center(child: Text('No team members found.'))
+                : ListView.builder(
               itemCount: _members.length,
               itemBuilder: (context, index) {
                 final member = _members[index];
@@ -347,7 +361,7 @@ class _AdminViewState extends State<AdminView>
 
                 return ListTile(
                   title: Text(
-                    member.fullName,
+                    member.displayName,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   
@@ -410,7 +424,10 @@ class _AdminViewState extends State<AdminView>
                   ),
                 );
               },
-            ),
+                ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openMemberDialog(),
         icon: const Icon(Icons.person_add),
@@ -834,6 +851,7 @@ class _DanceCatalogDialogState extends State<DanceCatalogDialog> {
 class _InviteMemberDialogState extends State<InviteMemberDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _nicknameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _instrumentsController = TextEditingController();
@@ -845,6 +863,7 @@ class _InviteMemberDialogState extends State<InviteMemberDialog> {
   @override
   void dispose() {
     _nameController.dispose();
+    _nicknameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _instrumentsController.dispose();
@@ -856,6 +875,9 @@ class _InviteMemberDialogState extends State<InviteMemberDialog> {
 
     Navigator.of(context).pop({
       'full_name': _nameController.text.trim(),
+      'nickname': _nicknameController.text.trim().isEmpty
+          ? null
+          : _nicknameController.text.trim(),
       'email': _emailController.text.trim(),
       'phone': _phoneController.text.trim().isEmpty
           ? null
@@ -882,6 +904,11 @@ class _InviteMemberDialogState extends State<InviteMemberDialog> {
                 validator: (value) => value == null || value.trim().isEmpty
                     ? 'Name is required'
                     : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _nicknameController,
+                decoration: const InputDecoration(labelText: 'Nickname'),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -945,6 +972,7 @@ class _InviteMemberDialogState extends State<InviteMemberDialog> {
 class _AddEditMemberDialogState extends State<AddEditMemberDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _nicknameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _instrumentsController = TextEditingController();
@@ -958,6 +986,7 @@ class _AddEditMemberDialogState extends State<AddEditMemberDialog> {
     super.initState();
     if (widget.member != null) {
       _nameController.text = widget.member!.fullName;
+      _nicknameController.text = widget.member!.nickname ?? '';
       _emailController.text = widget.member!.email ?? '';
       _phoneController.text = widget.member!.phone ?? '';
       _instrumentsController.text = widget.member!.instruments ?? '';
@@ -972,6 +1001,7 @@ class _AddEditMemberDialogState extends State<AddEditMemberDialog> {
   @override
   void dispose() {
     _nameController.dispose();
+    _nicknameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _instrumentsController.dispose();
@@ -982,6 +1012,9 @@ class _AddEditMemberDialogState extends State<AddEditMemberDialog> {
     if (_formKey.currentState!.validate()) {
       final payload = {
         'full_name': _nameController.text.trim(),
+        'nickname': _nicknameController.text.trim().isEmpty
+          ? null
+          : _nicknameController.text.trim(),
         'email': _emailController.text.trim().isEmpty
             ? null
             : _emailController.text.trim(),
@@ -1050,6 +1083,11 @@ class _AddEditMemberDialogState extends State<AddEditMemberDialog> {
                 validator: (val) => val == null || val.trim().isEmpty
                     ? 'Name is required'
                     : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _nicknameController,
+                decoration: const InputDecoration(labelText: 'Nickname'),
               ),
               const SizedBox(height: 12),
               TextFormField(
