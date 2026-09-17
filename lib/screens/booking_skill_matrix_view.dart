@@ -569,7 +569,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
             'Booking Skill Matrix',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -580,13 +580,14 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                         ? _selectedEvent
                         : null,
                     isExpanded: true,
+                    itemHeight: 48,
                     decoration: InputDecoration(
                       labelText: 'Event',
                       border: const OutlineInputBorder(),
                       isDense: compact,
                       contentPadding: compact
                           ? const EdgeInsets.symmetric(
-                              horizontal: 12,
+                              horizontal: 8,
                               vertical: 8,
                             )
                           : null,
@@ -617,7 +618,7 @@ class _BookingSkillMatrixViewState extends State<BookingSkillMatrixView> {
                       isDense: compact,
                       contentPadding: compact
                           ? const EdgeInsets.symmetric(
-                              horizontal: 12,
+                              horizontal: 8,
                               vertical: 8,
                             )
                           : null,
