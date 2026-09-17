@@ -190,12 +190,12 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
   }
 
   List<TeamMember> _candidates(int position) {
+
     final candidates = _members.where((member) {
       if (member.isMusician || !_attendingIds.contains(member.id)) return false;
       final competency = _competency(member.id, position);
-      return competency != null &&
-          (competency.proficiencyLevel == 'YP' ||
-              competency.proficiencyLevel == 'Y');
+      return competency != null && (competency.proficiencyLevel == 'YP' || competency.proficiencyLevel == 'Y' || 
+          (_selectedEvent?.eventType =='Practice' && competency.proficiencyLevel == 'L'));
     }).toList();
     candidates.sort((left, right) => _compareCandidates(position, left, right));
     return candidates;
@@ -233,9 +233,9 @@ class _DanceBuilderViewState extends State<DanceBuilderView> {
   Color _competencyColor(String proficiencyLevel) {
     switch (proficiencyLevel) {
       case 'YP':
-        return Colors.green.shade400;
-      case 'Y':
         return Colors.purple.shade300;
+      case 'Y':
+        return Colors.green.shade400;
       case 'L':
         return Colors.orange.shade300;
       default:

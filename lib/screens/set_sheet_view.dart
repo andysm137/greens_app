@@ -76,11 +76,6 @@ class _SetSheetViewState extends State<SetSheetView> {
             .from('musician_profiles')
             .select('member_id, primary_instrument, is_qualified'),
         _supabase
-            .from('competencies')
-            .select(
-              'member_id, dance_name, position_number, proficiency_level',
-            ),
-        _supabase
             .from('dance_catalog')
             .select('dance_name, standard_positions, has_maf, has_mab'),
       ]);
@@ -92,8 +87,7 @@ class _SetSheetViewState extends State<SetSheetView> {
       final musicianProfiles = List<Map<String, dynamic>>.from(
         results[4] as List,
       );
-      final competencies = List<Map<String, dynamic>>.from(results[5] as List);
-      final danceCatalog = List<Map<String, dynamic>>.from(results[6] as List);
+      final danceCatalog = List<Map<String, dynamic>>.from(results[5] as List);
 
       final memberNames = <String, String>{
         for (final member in members)
@@ -126,6 +120,16 @@ class _SetSheetViewState extends State<SetSheetView> {
           }.toList()..sort(
             (left, right) => left.toLowerCase().compareTo(right.toLowerCase()),
           );
+      final competencies = danceNames.isEmpty
+          ? <Map<String, dynamic>>[]
+          : List<Map<String, dynamic>>.from(
+              await _supabase
+                  .from('competencies')
+                  .select(
+                    'member_id, dance_name, position_number, proficiency_level',
+                  )
+                  .inFilter('dance_name', danceNames),
+            );
 
       final byDance = <String, Map<String, dynamic>>{};
       for (final dance in danceNames) {
@@ -171,7 +175,10 @@ class _SetSheetViewState extends State<SetSheetView> {
                 (item) =>
                     item['dance_name'] == dance &&
                     item['position_number'] == position &&
-                    ['YP', 'Y'].contains(item['proficiency_level']) &&
+                (item['proficiency_level'] == 'YP' ||
+                  item['proficiency_level'] == 'Y' ||
+                  (booking.eventType == 'Practice' &&
+                    item['proficiency_level'] == 'L')) &&
                     attendingIds.contains(item['member_id'].toString()) &&
                     !musicianMemberIds.contains(item['member_id'].toString()),
               )
@@ -471,9 +478,9 @@ class _SetSheetViewState extends State<SetSheetView> {
   Color _competencyColor(String proficiencyLevel) {
     switch (proficiencyLevel) {
       case 'YP':
-        return Colors.green.shade400;
-      case 'Y':
         return Colors.purple.shade300;
+      case 'Y':
+        return Colors.green.shade400;
       case 'L':
         return Colors.orange.shade300;
       default:
