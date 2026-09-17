@@ -20,11 +20,42 @@ class _SetSheetViewState extends State<SetSheetView> {
   Map<String, dynamic>? _sheet;
   bool _isLoading = true;
   String? _error;
+  bool _hidePastBookings = true;
+
+  bool _isPastBooking(EventModel booking) {
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final bookingDate = DateTime(
+      booking.eventDate.year,
+      booking.eventDate.month,
+      booking.eventDate.day,
+    );
+    return bookingDate.isBefore(todayOnly);
+  }
+
+  List<EventModel> get _visibleBookings => _hidePastBookings
+      ? _bookings.where((booking) => !_isPastBooking(booking)).toList()
+      : _bookings;
 
   @override
   void initState() {
     super.initState();
     _loadBookings();
+  }
+
+  Future<void> _setHidePastBookings(bool hidePastBookings) async {
+    final visibleBookings = hidePastBookings
+        ? _bookings.where((booking) => !_isPastBooking(booking)).toList()
+        : _bookings;
+    final selectedBooking = visibleBookings.contains(_selectedBooking)
+        ? _selectedBooking
+        : (visibleBookings.isEmpty ? null : visibleBookings.first);
+    setState(() {
+      _hidePastBookings = hidePastBookings;
+      _selectedBooking = selectedBooking;
+      if (selectedBooking == null) _sheet = null;
+    });
+    await _loadSheet();
   }
 
   Future<void> _loadBookings() async {
@@ -39,7 +70,9 @@ class _SetSheetViewState extends State<SetSheetView> {
       if (!mounted) return;
       setState(() {
         _bookings = bookings;
-        _selectedBooking ??= bookings.isEmpty ? null : bookings.first;
+        _selectedBooking ??= _visibleBookings.isEmpty
+            ? null
+            : _visibleBookings.first;
       });
       await _loadSheet();
     } catch (error) {
@@ -540,6 +573,15 @@ class _SetSheetViewState extends State<SetSheetView> {
       appBar: AppBar(
         title: const Text('Set Sheet'),
         actions: [
+          const Text('Hide past', style: TextStyle(fontSize: 12)),
+          Transform.scale(
+            scale: 0.8,
+            child: Switch(
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              value: _hidePastBookings,
+              onChanged: _setHidePastBookings,
+            ),
+          ),
           IconButton(
             tooltip: 'Print or save as PDF',
             icon: const Icon(Icons.print),
@@ -557,7 +599,7 @@ class _SetSheetViewState extends State<SetSheetView> {
               labelText: 'Booking',
               border: OutlineInputBorder(),
             ),
-            items: _bookings
+            items: _visibleBookings
                 .map(
                   (event) => DropdownMenuItem(
                     value: event,
