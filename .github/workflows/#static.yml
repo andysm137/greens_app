@@ -42,7 +42,9 @@ jobs:
         run: flutter pub get
 
       - name: Build web release
-        run: flutter build web --release --base-href "/SilkstoneGreensApp/"
+        run: |
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+          flutter build web --release --base-href "/SilkstoneGreensApp/" --dart-define=GIT_COMMIT=$GIT_COMMIT
 
       - name: Inspect generated release
         run: |
