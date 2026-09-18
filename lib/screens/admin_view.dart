@@ -5,6 +5,7 @@ import '../services/admin_auth_service.dart';
 import '../services/member_display_settings.dart';
 import '../services/notification_settings_repository.dart';
 import '../services/team_repository.dart';
+import '../version.dart';
 
 class AdminView extends StatefulWidget {
   const AdminView({Key? key}) : super(key: const Key('admin_view'));
@@ -310,7 +311,19 @@ class _AdminViewState extends State<AdminView>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin Console'),
+        title: Row(
+          children: [
+            const Text('Admin Console'),
+            const Spacer(),
+            Opacity(
+              opacity: 0.7,
+              child: Text(
+                'v$kAppVersion ($kAppGitCommit)',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
