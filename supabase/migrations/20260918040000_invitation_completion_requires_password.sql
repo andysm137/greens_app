@@ -2,7 +2,7 @@ CREATE OR REPLACE FUNCTION public.complete_own_invitation()
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, auth
 AS $$
 BEGIN
   UPDATE public.team_members
@@ -18,7 +18,7 @@ BEGIN
     );
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'No pending invitation found';
+    RAISE EXCEPTION 'A password must be set before completing this invitation';
   END IF;
 END;
 $$;
