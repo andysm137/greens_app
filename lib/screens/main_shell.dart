@@ -144,15 +144,16 @@ class _MainShellState extends State<MainShell> {
           ),
         ],
       ),
-      body: isMobile
-          ? _getSelectedWorkspaceWidget()
-          : Row(
-              children: [
-                _buildNavigationRail(),
-                const VerticalDivider(thickness: 1, width: 1),
-                Expanded(child: _getSelectedWorkspaceWidget()),
-              ],
-            ),
+      // Workspace content always stays as the last Row child so orientation
+      // changes (which flip isMobile) only add/remove the leading rail
+      // instead of reparenting the content and resetting its State.
+      body: Row(
+        children: [
+          if (!isMobile) _buildNavigationRail(),
+          if (!isMobile) const VerticalDivider(thickness: 1, width: 1),
+          Expanded(child: _getSelectedWorkspaceWidget()),
+        ],
+      ),
       bottomNavigationBar: isMobile ? _buildNavigationBar() : null,
     );
   }
